@@ -1,0 +1,15 @@
+{
+  "name": "JUNKRUN — Buy junk. Jump stars. Get rich.",
+  "short_name": "JUNKRUN",
+  "description": "A pocket idle trading game across the stars. Endless.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#05050a",
+  "theme_color": "#1a1210",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
