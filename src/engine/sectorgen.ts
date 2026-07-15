@@ -19,13 +19,13 @@ const TIER_ICONS = ['🔩', '🔮', '🧬', '🛰️'];
 const STATION_PREFIX = ['CINDER', 'GLACIER', 'RUSTED', 'GILDED', 'HOLLOW', 'FERAL', 'STATIC', 'DRIFTING', 'BROKEN', 'SILENT'];
 const STATION_SUFFIX = ['FORGE', 'DOCK', 'WORKS', 'PIT', 'REACH', 'HOLD', 'YARD', 'SPIRE', 'BELT', 'GATE'];
 
-export function sectorSeed(sector: number): number {
-  return hashSeed(`junkrun-sector-${sector}`);
+export function sectorSeed(sector: number, runSeed: number): number {
+  return (hashSeed(`junkrun-sector-${sector}`) ^ (runSeed >>> 0)) >>> 0;
 }
 
 /** 4 new goods introduced when entering `sector` (sector >= 2), one per tier band. */
-export function generateSectorGoods(sector: number): Good[] {
-  const rng = mulberry32(sectorSeed(sector));
+export function generateSectorGoods(sector: number, runSeed: number): Good[] {
+  const rng = mulberry32(sectorSeed(sector, runSeed));
   const goods: Good[] = [];
   const volatilities: Volatility[] = ['calm', 'choppy', 'wild', 'wild'];
   for (let band = 0; band < 4; band++) {
@@ -61,9 +61,9 @@ export interface SectorStationDressing {
 }
 
 /** Cheap-but-effective per-sector reskin: new name + palette hue-rotation, same archetype. */
-export function dressStationForSector(baseStationId: string, sector: number): SectorStationDressing {
+export function dressStationForSector(baseStationId: string, sector: number, runSeed: number): SectorStationDressing {
   if (sector <= 1) return { name: '', hueShift: 0 };
-  const rng = mulberry32(hashSeed(`${baseStationId}-sector-${sector}`));
+  const rng = mulberry32((hashSeed(`${baseStationId}-sector-${sector}`) ^ (runSeed >>> 0)) >>> 0);
   const prefix = pick(rng, STATION_PREFIX);
   const suffix = pick(rng, STATION_SUFFIX);
   const hueShift = Math.round(randRange(rng, 20, 340));
@@ -71,8 +71,8 @@ export function dressStationForSector(baseStationId: string, sector: number): Se
 }
 
 /** Re-rolled bias for sector-N goods across the 7 stations — new best routes every sector. */
-export function generateSectorBias(stationIds: string[], goods: Good[], sector: number): Record<string, Record<string, number>> {
-  const rng = mulberry32(hashSeed(`bias-sector-${sector}`));
+export function generateSectorBias(stationIds: string[], goods: Good[], sector: number, runSeed: number): Record<string, Record<string, number>> {
+  const rng = mulberry32((hashSeed(`bias-sector-${sector}`) ^ (runSeed >>> 0)) >>> 0);
   const bias: Record<string, Record<string, number>> = {};
   for (const st of stationIds) bias[st] = {};
   for (const good of goods) {

@@ -2,7 +2,8 @@ import { STATIONS } from '../config/stations';
 import { GOODS } from '../config/goods';
 import { RIGS } from '../config/rigs';
 import type { ActiveMarketEvent, WaveState } from './price';
-import { initWave } from './price';
+import { initWave, fastForwardWave } from './price';
+import { mulberry32, hashSeed } from './rng';
 import type { QuestKind, QuestSize } from '../config/types';
 import { SCHEMA_VERSION } from './save';
 
@@ -145,12 +146,26 @@ export interface GameState {
   };
 
   questIdSeq: number;
+
+  /** Per-run seed for procedural goods/routes. 0 = legacy save (pre-seed behavior). */
+  runSeed: number;
+}
+
+export function newRunSeed(): number {
+  return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
 }
 
 export function createInitialState(): GameState {
   const now = Date.now();
+  const runSeed = newRunSeed();
   const waves: Record<string, WaveState> = {};
-  for (const g of GOODS) waves[g.id] = initWave();
+  for (const g of GOODS) {
+    const w = initWave();
+    // Pre-churn so a new run's market opens mid-motion instead of perfectly flat.
+    const rng = mulberry32((hashSeed(g.id) ^ runSeed) >>> 0);
+    fastForwardWave(w, g.volatility, 8 + Math.floor(rng() * 8), rng);
+    waves[g.id] = w;
+  }
 
   const rigs: Record<string, RigState> = {};
   for (const r of RIGS) rigs[r.id] = { owned: 0, managed: false };
@@ -217,6 +232,8 @@ export function createInitialState(): GameState {
     },
 
     questIdSeq: 1,
+
+    runSeed,
   };
 }
 

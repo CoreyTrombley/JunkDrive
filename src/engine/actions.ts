@@ -159,6 +159,7 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     ...loaded,
     settings: { ...fresh.settings, ...loaded.settings },
     stats: { ...fresh.stats, ...loaded.stats },
+    runSeed: typeof loaded.runSeed === 'number' ? loaded.runSeed : 0,
   };
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
@@ -1110,7 +1111,7 @@ export function payGateToll(): { ok: boolean; reason?: string } {
   const toll = nextSectorToll(state);
   if (state.credits < toll) return { ok: false, reason: 'Not enough credits.' };
   setState((s) => {
-    const newGoods = generateSectorGoods(dest);
+    const newGoods = generateSectorGoods(dest, s.runSeed ?? 0);
     const waves = { ...s.waves };
     for (const g of newGoods) if (!waves[g.id]) waves[g.id] = initWave();
     return {

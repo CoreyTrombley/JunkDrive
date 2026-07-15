@@ -72,7 +72,7 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
           {positioned.map(({ st, x, y }) => {
             const locked = st.unlockRank > s.rank;
             const evs = eventsFor(st.id);
-            const dressing = dressStationForSector(st.id, s.sector);
+            const dressing = dressStationForSector(st.id, s.sector, s.runSeed ?? 0);
             const isBestRoute = route?.stationId === st.id;
             return (
               <button
@@ -108,7 +108,7 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
         const st = STATIONS.find((x) => x.id === e.stationId);
         const def = MARKET_EVENTS_BY_ID[e.kind];
         const good = e.goodId ? goodById(e.goodId) : null;
-        const dressing = st ? dressStationForSector(st.id, s.sector) : null;
+        const dressing = st ? dressStationForSector(st.id, s.sector, s.runSeed ?? 0) : null;
         const stationName = dressing?.name || st?.name || '?';
         const desc = def
           ? def.copyTemplate

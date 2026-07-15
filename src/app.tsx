@@ -53,7 +53,7 @@ export function App() {
   }, [s.pendingOfflineReport]);
 
   const station = STATIONS_BY_ID[s.currentStation];
-  const dressing = dressStationForSector(s.currentStation, s.sector);
+  const dressing = dressStationForSector(s.currentStation, s.sector, s.runSeed ?? 0);
 
   useEffect(() => {
     const theme = station.theme;
