@@ -300,11 +300,15 @@ class Synth {
       case 'buy':
         this.tone(300, 0.08, { type: 'triangle', startFreq: 600, gain: 0.18 });
         break;
-      case 'sell':
-        this.tone(659.25, 0.12, { gain: 0.22 });
-        this.tone(783.99, 0.12, { gain: 0.18, delay: 0.02 });
+      case 'sell': {
+        const mag = Math.min(8, Math.max(0, evt.data ?? 2)); // log10 profit bucket
+        const shift = Math.pow(SEMITONE, (mag - 2) * 2);     // ±2 semitones per decade around ₡100
+        this.tone(659.25 * shift, 0.12, { gain: 0.22 });
+        this.tone(783.99 * shift, 0.12, { gain: 0.18, delay: 0.02 });
         this.noise(0.05, { gain: 0.1, filterType: 'highpass', filterFreq: 4000 });
+        if (mag >= 5) this.tone(1046.5 * shift, 0.14, { gain: 0.16, delay: 0.05 }); // big-sale sparkle
         break;
+      }
       case 'lucky_flip':
         this.tone(659.25, 0.1, { gain: 0.22 });
         this.tone(783.99, 0.1, { gain: 0.18, delay: 0.02 });
@@ -362,6 +366,36 @@ class Synth {
       case 'toll':
         this.tone(90, 0.5, { startFreq: 260, gain: 0.25 });
         this.noise(0.3, { gain: 0.1, filterType: 'lowpass', filterFreq: 1200 });
+        break;
+      case 'upgrade':
+        [392, 523.25, 659.25].forEach((f, i) => this.tone(f, 0.1, { type: 'triangle', gain: 0.18, delay: i * 0.06 }));
+        this.noise(0.12, { gain: 0.06, filterType: 'highpass', filterFreq: 6000, delay: 0.18 });
+        break;
+      case 'manager_hire':
+        this.tone(261.63, 0.14, { type: 'triangle', gain: 0.2 });
+        this.tone(329.63, 0.14, { type: 'triangle', gain: 0.2, delay: 0.1 });
+        this.tone(392, 0.2, { type: 'triangle', gain: 0.22, delay: 0.2 });
+        break;
+      case 'milestone':
+        this.tone(523.25, 0.1, { type: 'square', gain: 0.16 });
+        this.tone(659.25, 0.1, { type: 'square', gain: 0.16, delay: 0.08 });
+        this.tone(1046.5, 0.18, { type: 'square', gain: 0.18, delay: 0.16 });
+        this.noise(0.25, { gain: 0.08, filterType: 'highpass', filterFreq: 7000, delay: 0.16 });
+        break;
+      case 'daily_claim':
+        [523.25, 659.25, 880].forEach((f, i) => this.tone(f, 0.12, { gain: 0.2, delay: i * 0.07 }));
+        break;
+      case 'boost':
+        this.tone(880, 0.5, { type: 'sawtooth', startFreq: 220, gain: 0.15 });
+        this.noise(0.4, { gain: 0.1, filterType: 'bandpass', filterFreq: 800, filterFreqEnd: 4000 });
+        break;
+      case 'encounter_good':
+        this.tone(523.25, 0.1, { gain: 0.18 });
+        this.tone(659.25, 0.14, { gain: 0.2, delay: 0.09 });
+        break;
+      case 'encounter_bad':
+        this.tone(196, 0.25, { type: 'sawtooth', startFreq: 260, gain: 0.16 });
+        this.tone(130.81, 0.3, { type: 'sawtooth', gain: 0.12, delay: 0.12 });
         break;
     }
   }
