@@ -43,6 +43,10 @@ interface AmbiencePattern {
   bedGain: number; bedWave: OscillatorType;
   shimmer?: boolean;              // quiet octave-up partial on lead notes
   detuneJitter?: number;          // ± cents random detune per lead note
+  arpChord: number[];       // scale-degree chord the arp channel cycles through (octave up)
+  arpEvery: number;         // arp note every N sixteenth-steps; 0 = no arp voice
+  arpGain: number;
+  bTexture: 'muteDrums' | 'leadSwap' | 'arpDouble' | 'none'; // texture change in B blocks
 }
 
 const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
@@ -55,6 +59,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
     kick: [0, 4, 8, 12], hat: [2, 6, 10, 14],
     leadGain: 0.055, bassGain: 0.07, drumGain: 0.05, noteDur: 0.16, bassDur: 0.24,
     bedGain: 0.09, bedWave: 'sawtooth',
+    arpChord: [0, 2, 4], arpEvery: 4, arpGain: 0.03, bTexture: 'muteDrums',
   },
   // Neon Bazaar — bright market bounce: fast poppy hook, busy hats.
   plink: {
@@ -65,6 +70,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
     kick: [0, 8], hat: [0, 2, 4, 6, 8, 10, 12, 14],
     leadGain: 0.05, bassGain: 0.06, drumGain: 0.04, noteDur: 0.11, bassDur: 0.18,
     bedGain: 0.04, bedWave: 'sine',
+    arpChord: [0, 2, 4, 7], arpEvery: 2, arpGain: 0.035, bTexture: 'arpDouble',
   },
   // Frostdock — icy and spacious: sparse bell lead, slow pulse.
   bell: {
@@ -75,6 +81,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
     kick: [0], hat: [8],
     leadGain: 0.09, bassGain: 0.05, drumGain: 0.02, noteDur: 0.9, bassDur: 1.4,
     bedGain: 0.04, bedWave: 'sine', shimmer: true,
+    arpChord: [0, 4, 7], arpEvery: 8, arpGain: 0.04, bTexture: 'muteDrums',
   },
   // The Greenhouse — organic drift: legato triangle melody, brushed hats.
   pad: {
@@ -85,6 +92,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
     kick: [], hat: [4, 12],
     leadGain: 0.06, bassGain: 0.06, drumGain: 0.02, noteDur: 0.7, bassDur: 1.6,
     bedGain: 0.11, bedWave: 'sine',
+    arpChord: [0, 2, 4], arpEvery: 8, arpGain: 0.03, bTexture: 'arpDouble',
   },
   // Ember Works — the forge: hammering saw riff, four-on-the-floor.
   stab: {
@@ -95,6 +103,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
     kick: [0, 4, 8, 12], hat: [2, 6, 10, 14],
     leadGain: 0.06, bassGain: 0.07, drumGain: 0.055, noteDur: 0.12, bassDur: 0.16,
     bedGain: 0.07, bedWave: 'sawtooth',
+    arpChord: [0, 3, 5], arpEvery: 4, arpGain: 0.04, bTexture: 'muteDrums',
   },
   // Halo Court — opulent sparkle: fast up-down arpeggio, glittery hats.
   arp: {
@@ -105,6 +114,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
     kick: [0, 8], hat: [0, 2, 4, 6, 8, 10, 12, 14],
     leadGain: 0.045, bassGain: 0.055, drumGain: 0.03, noteDur: 0.1, bassDur: 0.5,
     bedGain: 0.04, bedWave: 'sine', shimmer: true,
+    arpChord: [0, 2, 4, 7], arpEvery: 2, arpGain: 0.03, bTexture: 'leadSwap',
   },
   // The Signal — eerie broadcast: sparse detuned phrase over a heavy drone.
   drone: {
@@ -115,6 +125,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
     kick: [0], hat: [],
     leadGain: 0.07, bassGain: 0.06, drumGain: 0.03, noteDur: 1.2, bassDur: 2.2,
     bedGain: 0.13, bedWave: 'sawtooth', detuneJitter: 18,
+    arpChord: [0, 3, 6], arpEvery: 8, arpGain: 0.025, bTexture: 'none',
   },
 };
 
@@ -408,11 +419,16 @@ class Synth {
       while (nextStepTime < c.currentTime + 0.2) {
         const delay = Math.max(0, nextStepTime - c.currentTime);
         const bar = step % 16;
+        const block = Math.floor(step / 32) % 4;   // A A B A
+        const isB = block === 2;
         const leadDeg = cfg.lead[step % cfg.lead.length];
         if (leadDeg !== null && leadDeg !== undefined) {
           const detune = cfg.detuneJitter ? (Math.random() * 2 - 1) * cfg.detuneJitter : 0;
           const freq = scale[Math.min(leadDeg, scale.length - 1)];
-          this.tone(freq, cfg.noteDur, { type: cfg.leadWave, gain: cfg.leadGain, delay, detuneCents: detune, bus: this.musicBus });
+          const leadWave = isB && cfg.bTexture === 'leadSwap'
+            ? (cfg.leadWave === 'square' ? 'triangle' : cfg.leadWave === 'triangle' ? 'square' : cfg.leadWave)
+            : cfg.leadWave;
+          this.tone(freq, cfg.noteDur, { type: leadWave, gain: cfg.leadGain, delay, detuneCents: detune, bus: this.musicBus });
           if (cfg.shimmer) {
             this.tone(freq * 2, cfg.noteDur * 0.6, { type: 'sine', gain: cfg.leadGain * 0.35, delay: delay + 0.02, bus: this.musicBus });
           }
@@ -421,12 +437,20 @@ class Synth {
         if (bassDeg !== null && bassDeg !== undefined) {
           this.tone(scale[Math.min(bassDeg, scale.length - 1)] / 2, cfg.bassDur, { type: 'triangle', gain: cfg.bassGain, delay, bus: this.musicBus });
         }
-        if (cfg.kick.includes(bar)) {
+        const muteDrums = isB && cfg.bTexture === 'muteDrums';
+        if (!muteDrums && cfg.kick.includes(bar)) {
           // kick: fast sine drop 120→45 Hz
           this.tone(45, 0.12, { type: 'sine', startFreq: 120, gain: cfg.drumGain * 2.2, delay, bus: this.musicBus });
         }
-        if (cfg.hat.includes(bar)) {
+        if (!muteDrums && cfg.hat.includes(bar)) {
           this.noise(0.03, { gain: cfg.drumGain, filterType: 'highpass', filterFreq: 8000, delay, bus: this.musicBus });
+        }
+        if (cfg.arpEvery > 0) {
+          const effEvery = isB && cfg.bTexture === 'arpDouble' ? Math.max(1, Math.floor(cfg.arpEvery / 2)) : cfg.arpEvery;
+          if (step % effEvery === 0) {
+            const deg = cfg.arpChord[Math.floor(step / effEvery) % cfg.arpChord.length];
+            this.tone(scale[Math.min(deg, scale.length - 1)] * 2, Math.min(0.12, stepSec * 0.9), { type: 'square', gain: cfg.arpGain, delay, bus: this.musicBus });
+          }
         }
         step++;
         nextStepTime += stepSec;
