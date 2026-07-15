@@ -9,7 +9,8 @@
     "build:unsafe": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "balance": "node scripts/balance-sim.mjs"
   },
   "dependencies": {
     "@preact/signals": "^2.9.3",
