@@ -25,6 +25,7 @@ import {
   rigUnitCost, rigBatchCost, maxAffordableRigQty, milestoneMultiplier,
   codexBonusMult, globalIncomeMult, totalYardRatePerSec, gateToll,
   sectorUnlockRank, darkMatterFromLifetime, offlineCapMs, luckyFlipChance,
+  rigTapPayout,
 } from './formulas';
 import {
   maxHold, usedHold, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
@@ -868,7 +869,7 @@ export function tapRig(rigId: string): { ok: boolean; payout: number } {
   const r = state.rigs[rigId];
   if (!rig || !r || r.owned <= 0 || r.managed) return { ok: false, payout: 0 };
   const t = now();
-  const payout = rig.basePayout * r.owned * milestoneMultiplier(r.owned) * globalIncomeMult(state, t);
+  const payout = rigTapPayout(state, rig, t);
   setState((s) => {
     let st: GameState = {
       ...s,
