@@ -73,7 +73,7 @@ export function biasFor(stationId: string, good: Good, runSeed = activeRunSeed()
 }
 
 export function getPrice(state: GameState, stationId: string, goodId: string): number {
-  const good = goodById(goodId);
+  const good = goodById(goodId, state.runSeed ?? 0);
   if (!good) return 0;
   const wave = state.waves[goodId];
   const waveValue = wave ? wave.value : 1;
