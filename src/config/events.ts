@@ -5,7 +5,7 @@ export const MARKET_EVENTS: MarketEventDef[] = [
   {
     id: 'demand_spike', kind: 'spike', name: 'DEMAND SPIKE', icon: '📈',
     copyTemplate: '{station} IS BUYING — {good} ×{mult} 🔥',
-    minMult: 3, maxMult: 5, scope: 'single', goodCount: 1,
+    minMult: 3, maxMult: 6, scope: 'single', goodCount: 1,
     minDurationMs: 8 * 60_000, maxDurationMs: 20 * 60_000, weight: 26,
   },
   {

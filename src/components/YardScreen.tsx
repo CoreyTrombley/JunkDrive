@@ -3,7 +3,7 @@ import { store, clockTick } from '../engine/store';
 import { RIGS } from '../config/rigs';
 import {
   rigUnitCost, rigBatchCost, maxAffordableRigQty, milestoneMultiplier, nextMilestone,
-  totalYardRatePerSec, globalIncomeMult,
+  totalYardRatePerSec, globalIncomeMult, rigEffectiveRatePerSec, rigTapPayout,
 } from '../engine/formulas';
 import { buyRig, hireManager, tapRig } from '../engine/actions';
 import { formatCredits, formatNum } from '../engine/num';
@@ -62,7 +62,11 @@ export function YardScreen() {
               <div class="rig-icon">{rig.icon}</div>
               <div class="rig-info">
                 <div class="rig-name">{rig.name} {r.managed && <span style={{ color: 'var(--profit)', fontSize: 10 }}>● {rig.managerName}</span>}</div>
-                <div class="rig-sub">{formatCredits(perUnit)}/s per unit · {rig.cycleSec}s cycle · ×{milestoneMultiplier(r.owned)} milestone</div>
+                <div class="rig-sub">
+                  {r.owned > 0
+                    ? `${formatCredits(rigEffectiveRatePerSec(s, rig, t))}/s with ${r.owned} owned · ×${milestoneMultiplier(r.owned)} milestone${r.managed ? '' : ' · manual'}`
+                    : `${formatCredits(perUnit)}/s per unit · ${rig.cycleSec}s cycle`}
+                </div>
               </div>
               <div class="rig-owned mono">{r.owned}</div>
             </div>
@@ -92,7 +96,7 @@ export function YardScreen() {
             </div>
             {tappable && (
               <div class="rig-tap-hint">
-                👆 Tap anywhere on this card to run a cycle by hand — +{formatCredits(rig.basePayout * r.owned * milestoneMultiplier(r.owned) * globalIncomeMult(s, t))}
+                👆 Tap anywhere on this card to work it by hand — +{formatCredits(rigTapPayout(s, rig, t))}/tap
               </div>
             )}
           </div>

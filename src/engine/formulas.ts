@@ -2,6 +2,7 @@ import type { Rig } from '../config/types';
 import { MILESTONES } from '../config/rigs';
 import type { GameState } from './state';
 import { CODEX_SETS } from '../config/codex';
+import { sectorScale } from './price';
 
 export function rigUnitCost(rig: Rig, owned: number): number {
   return Math.round(rig.baseCost * Math.pow(rig.costGrowth, owned));
@@ -60,18 +61,34 @@ export function globalIncomeMult(state: GameState, atTime: number): number {
   const codexMult = codexBonusMult(state);
   const ghostFreq = state.codex.jackpots['ghost_frequency'] ? 1.005 : 1;
   const boost = boostActive(state, atTime) ? 2 : 1;
-  return dmMult * rankMult * codexMult * ghostFreq * boost;
+  // Sector parity: trade prices scale ×8 per sector (sectorScale); the Yard gets the
+  // same multiplier so active vs idle balance holds in every sector.
+  return dmMult * rankMult * codexMult * ghostFreq * boost * sectorScale(state.sector);
 }
 
-export function rigRatePerSec(state: GameState, rig: Rig, atTime: number): number {
+/** Full per-second rate of a rig's owned units — milestones, global mults and the
+ *  Salvage Fleet flip-margin bonus included — independent of whether it's managed.
+ *  This is both what a manager automates and what one hand-tap is worth per second. */
+export function rigEffectiveRatePerSec(state: GameState, rig: Rig, atTime: number): number {
   const r = state.rigs[rig.id];
-  if (!r || !r.managed || r.owned <= 0) return 0;
+  if (!r || r.owned <= 0) return 0;
   let base = (rig.basePayout / rig.cycleSec) * r.owned * milestoneMultiplier(r.owned) * globalIncomeMult(state, atTime);
   if (rig.id === 'salvage_fleet') {
     const bonus = Math.min(3, state.bests.bestFlipMargin); // capped +300%
     base *= 1 + bonus;
   }
   return base;
+}
+
+export function rigRatePerSec(state: GameState, rig: Rig, atTime: number): number {
+  const r = state.rigs[rig.id];
+  if (!r || !r.managed) return 0;
+  return rigEffectiveRatePerSec(state, rig, atTime);
+}
+
+/** One tap = one second of the rig's effective income (was: a full cycle — grossly overpaid). */
+export function rigTapPayout(state: GameState, rig: Rig, atTime: number): number {
+  return rigEffectiveRatePerSec(state, rig, atTime);
 }
 
 export function totalYardRatePerSec(state: GameState, rigs: Rig[], atTime: number): number {

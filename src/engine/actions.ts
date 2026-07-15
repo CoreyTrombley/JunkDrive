@@ -25,6 +25,7 @@ import {
   rigUnitCost, rigBatchCost, maxAffordableRigQty, milestoneMultiplier,
   codexBonusMult, globalIncomeMult, totalYardRatePerSec, gateToll,
   sectorUnlockRank, darkMatterFromLifetime, offlineCapMs, luckyFlipChance,
+  rigTapPayout,
 } from './formulas';
 import {
   maxHold, usedHold, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
@@ -158,6 +159,7 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     ...loaded,
     settings: { ...fresh.settings, ...loaded.settings },
     stats: { ...fresh.stats, ...loaded.stats },
+    runSeed: typeof loaded.runSeed === 'number' ? loaded.runSeed : 0,
   };
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
@@ -231,8 +233,17 @@ export function exportSave(): string {
 export function importSave(code: string): { ok: boolean; reason?: string } {
   try {
     const loaded = importSaveCode(code);
-    store.value = loaded;
-    writeSave(loaded);
+    // Same defensive merge as bootGame: saves from before a field existed
+    // (activePlayMs, musicVolume, …) must backfill defaults, and this path
+    // never goes through bootGame.
+    const fresh = createInitialState();
+    const merged: GameState = {
+      ...loaded,
+      settings: { ...fresh.settings, ...loaded.settings },
+      stats: { ...fresh.stats, ...loaded.stats },
+    };
+    store.value = merged;
+    writeSave(merged);
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : 'Invalid save code.' };
@@ -275,7 +286,7 @@ function processMarketPulses(state: GameState, t: number): GameState {
   const pulses = Math.floor(elapsed / PULSE_INTERVAL_MS);
   const waves = { ...state.waves };
   for (const goodId in waves) {
-    const good = goodById(goodId);
+    const good = goodById(goodId, state.runSeed ?? 0);
     if (!good) continue;
     const w = { value: waves[goodId].value, history: [...waves[goodId].history] };
     fastForwardWave(w, good.volatility, pulses, sessionRng);
@@ -309,6 +320,14 @@ export function tick(): void {
   const t = now();
   setState((s) => {
     let state = s;
+    // Active play time: count small foreground gaps only (the 250ms clock while the
+    // app is open); anything >5s means we were backgrounded/closed, and hidden tabs
+    // don't count even if a throttled interval fires.
+    const dt = t - state.lastSeen;
+    const visible = typeof document === 'undefined' || !document.hidden;
+    if (dt > 0 && dt <= 5000 && visible) {
+      state = { ...state, stats: { ...state.stats, activePlayMs: state.stats.activePlayMs + dt } };
+    }
     state = settleIdleIncome(state, t);
     state = regenFuelState(state, t);
     state = processMarketPulses(state, t);
@@ -401,7 +420,7 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
   const t = now();
 
   const streakActive = state.hotStreak.expiresAt > t;
-  const streakMult = 1 + Math.min(streakActive ? state.hotStreak.count : 0, 5) * 0.08;
+  const streakMult = 1 + Math.min(streakActive ? state.hotStreak.count : 0, 5) * 0.10;
   const luckyChance = luckyFlipChance(state.relics['lucky_charm'] || 0);
   const isCrit = chance(sessionRng, luckyChance);
   const effPrice = basePrice * streakMult * (isCrit ? 2 : 1);
@@ -455,7 +474,7 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
     emit({ type: 'sfx', id: 'lucky_flip' });
     emit({ type: 'confetti', power: 'small' });
   } else {
-    emit({ type: 'sfx', id: 'sell' });
+    emit({ type: 'sfx', id: 'sell', data: Math.max(0, Math.floor(Math.log10(Math.max(1, profit)))) });
   }
   emit({ type: 'haptic', pattern: 'sell' });
   emit({ type: 'floater', text: formatSignedCredits(profit), kind: profit >= 0 ? 'profit' : 'loss' });
@@ -639,6 +658,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
   if (!def || !choice) return { ok: false, text: '' };
   const t = now();
   let resultText = '';
+  let outcome = 'neutral' as 'good' | 'bad' | 'neutral';
 
   setState((s) => {
     let st: GameState = { ...s, pendingEncounter: null };
@@ -659,14 +679,17 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           const cost = cargoValue(st) * pct;
           st = { ...st, credits: Math.max(0, st.credits - cost) };
           resultText = `Paid ${formatSignedCredits(-cost).replace('-', '')}. They let you through.`;
+          outcome = 'bad';
         } else {
           const success = chance(sessionRng, Number(choice.successChance ?? 0.5));
           if (success) {
             st = { ...st, xp: st.xp + Number(choice.params?.xpOnEscape ?? 30) };
             resultText = 'You lost them in an asteroid field! +XP';
+            outcome = 'good';
           } else {
             st = { ...st, cargo: dropCargoFraction(st.cargo, Number(choice.params?.lossPctOnFail ?? 0.3)) };
             resultText = 'They clipped your hold. Some cargo is gone.';
+            outcome = 'bad';
           }
         }
         break;
@@ -683,9 +706,11 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
             const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
             st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
             resultText = qty > 0 ? `Salvaged ${qty}× ${good.name}. Free loot.` : 'Hold was full — grabbed nothing.';
+            outcome = 'good';
           } else {
             st = { ...st, fuel: Math.max(0, st.fuel - Number(choice.params?.fuelLossOnFail ?? 1)) };
             resultText = 'Booby trap! Lost fuel scrambling out.';
+            outcome = 'bad';
           }
         } else {
           st = { ...st, xp: st.xp + Number(choice.params?.xp ?? 5) };
@@ -711,6 +736,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           if (qty > 0 && st.credits >= cost && isGoodDeal) {
             st = { ...st, credits: st.credits - cost, cargo: addCargo(st.cargo, good.id, qty, dealPrice) };
             resultText = `Bought ${qty}× ${good.name} at ${Math.round((1 - pct) * 100)}% off galactic average.`;
+            outcome = 'good';
           } else {
             resultText = "'Eh, changed my mind.' Nothing happens.";
           }
@@ -724,6 +750,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           const cost = contrabandValue(st) * Number(choice.params?.pct ?? 0.4);
           st = { ...st, credits: Math.max(0, st.credits - cost) };
           resultText = `Paid a ${formatSignedCredits(-cost).replace('-', '')} fine. Clean record.`;
+          outcome = 'bad';
         } else if (choice.id === 'bribe') {
           const backfireChance = Number(choice.params?.backfireChance ?? 0.25);
           const backfired = chance(sessionRng, backfireChance);
@@ -731,9 +758,11 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           const cost = contrabandValue(st) * pct;
           st = { ...st, credits: Math.max(0, st.credits - cost) };
           resultText = backfired ? 'The bribe backfired. That cost more than planned.' : 'Officer looks the other way.';
+          outcome = backfired ? 'bad' : 'good';
         } else {
           st = { ...st, cargo: dropContraband(st.cargo), xp: st.xp + Number(choice.params?.xp ?? 10) };
           resultText = 'Jettisoned the goods. Clean getaway.';
+          outcome = 'bad';
         }
         break;
       }
@@ -747,15 +776,18 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
               const bonus = Math.max(20, netWorth(st) * 0.03);
               st = { ...st, credits: st.credits + bonus };
               resultText = `Grateful survivors paid you ${formatSignedCredits(bonus)}.`;
+              outcome = 'good';
             } else if (roll < 0.75) {
               const unlocked = allUnlockedGoods(st);
               const good = unlocked.length ? pick(sessionRng, unlocked) : GOODS[0];
               const qty = Math.min(randInt(sessionRng, 2, 5), maxHold(st) - usedHold(st));
               st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
               resultText = `They gave you ${qty}× ${good.name} in thanks.`;
+              outcome = 'good';
             } else {
               st = { ...st, xp: st.xp + 40 };
               resultText = 'A strange story, and solid XP.';
+              outcome = 'good';
             }
           } else {
             resultText = 'It was a recording. Creepy.';
@@ -776,6 +808,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
             delete cargo[goodId];
             st = { ...st, credits: st.credits + revenue, lifetimeEarnings: st.lifetimeEarnings + revenue, cargo };
             resultText = `Sold ${owned}× Earth Relics for ${formatSignedCredits(revenue)}! 💎`;
+            outcome = 'good';
           } else {
             resultText = "You don't have any. Awkward.";
           }
@@ -788,6 +821,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
         if (choice.id === 'hunt') {
           st = { ...st, xp: st.xp + Number(choice.params?.xp ?? 15) };
           resultText = 'Caught it. A very confused space rat.';
+          outcome = 'good';
         } else {
           const goodId = String(choice.params?.goodId ?? 'protein_packs');
           const lossQty = Number(choice.params?.lossQty ?? 3);
@@ -798,6 +832,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           else cargo[goodId] = { ...cargo[goodId], qty: newQty };
           st = { ...st, cargo };
           resultText = `It ate ${Math.min(lossQty, owned)} units before you noticed.`;
+          outcome = 'bad';
         }
         break;
       }
@@ -809,7 +844,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
     return st;
   });
 
-  emit({ type: 'sfx', id: 'event_card' });
+  emit({ type: 'sfx', id: outcome === 'good' ? 'encounter_good' : outcome === 'bad' ? 'encounter_bad' : 'event_card' });
   return { ok: true, text: resultText };
 }
 
@@ -838,7 +873,13 @@ export function buyRig(rigId: string, qty: number | 'max'): { ok: boolean; bough
     st = progressQuests(st, (q) => (q.kind === 'buy_rig' ? { ...q, progress: Math.min(q.goal, q.progress + buyQty) } : q));
     return st;
   });
-  emit({ type: 'sfx', id: 'buy' });
+  if (milestoneMultiplier(owned + buyQty) > milestoneMultiplier(owned)) {
+    emit({ type: 'sfx', id: 'milestone' });
+    emit({ type: 'confetti', power: 'small' });
+    emit({ type: 'toast', text: `${rig.name} hit a milestone — output doubled!`, icon: rig.icon });
+  } else {
+    emit({ type: 'sfx', id: 'buy' });
+  }
   emit({ type: 'haptic', pattern: 'tap' });
   return { ok: true, bought: buyQty, spent: cost };
 }
@@ -856,7 +897,7 @@ export function hireManager(rigId: string): { ok: boolean; reason?: string } {
     return st;
   });
   emit({ type: 'toast', text: `${rig.managerName} is on the clock. It earns while you fly.`, icon: rig.icon });
-  emit({ type: 'sfx', id: 'buy' });
+  emit({ type: 'sfx', id: 'manager_hire' });
   emit({ type: 'confetti', power: 'small' });
   if (rigId === 'vending_drones') maybeOfferInstall();
   return { ok: true };
@@ -868,7 +909,7 @@ export function tapRig(rigId: string): { ok: boolean; payout: number } {
   const r = state.rigs[rigId];
   if (!rig || !r || r.owned <= 0 || r.managed) return { ok: false, payout: 0 };
   const t = now();
-  const payout = rig.basePayout * r.owned * milestoneMultiplier(r.owned) * globalIncomeMult(state, t);
+  const payout = rigTapPayout(state, rig, t);
   setState((s) => {
     let st: GameState = {
       ...s,
@@ -902,7 +943,7 @@ export function useBoostToken(): { ok: boolean } {
   if (state.boostTokens <= 0) return { ok: false };
   if (state.activeBoost && state.activeBoost.expiresAt > t) return { ok: false };
   setState((s) => ({ ...s, boostTokens: s.boostTokens - 1, activeBoost: { expiresAt: now() + BOOST_DURATION_MS } }));
-  emit({ type: 'sfx', id: 'buy' });
+  emit({ type: 'sfx', id: 'boost' });
   emit({ type: 'confetti', power: 'small' });
   return { ok: true };
 }
@@ -920,7 +961,7 @@ export function buyShipUpgrade(upgradeId: string): { ok: boolean; reason?: strin
   const cost = upgradeCost(def, level);
   if (state.credits < cost) return { ok: false, reason: 'Not enough credits.' };
   setState((s) => ({ ...s, credits: s.credits - cost, shipUpgrades: { ...s.shipUpgrades, [upgradeId]: level + 1 } }));
-  emit({ type: 'sfx', id: 'buy' });
+  emit({ type: 'sfx', id: 'upgrade' });
   emit({ type: 'confetti', power: 'small' });
   return { ok: true };
 }
@@ -1007,7 +1048,7 @@ export function claimDailyStreak(): { ok: boolean; reason?: string; day?: number
     return st;
   });
 
-  emit({ type: 'sfx', id: 'quest_claim' });
+  emit({ type: 'sfx', id: 'daily_claim' });
   emit({ type: 'confetti', power: day === 7 ? 'big' : 'small' });
   if (usedShield) emit({ type: 'toast', text: 'Streak Shield used — we covered for you. Get back out there.', icon: '🛡️' });
   return { ok: true, day };
@@ -1063,7 +1104,7 @@ export function prestige(): { ok: boolean; dmGained?: number } {
       dailyStreak: s.dailyStreak,
       settings: s.settings,
       onboarding: s.onboarding,
-      stats: { ...fresh.stats, totalPrestiges: s.stats.totalPrestiges + 1 },
+      stats: { ...fresh.stats, totalPrestiges: s.stats.totalPrestiges + 1, activePlayMs: s.stats.activePlayMs },
       questIdSeq: s.questIdSeq,
     };
     return { ...merged, quests: generateFullRail(merged, sessionRng, s.questIdSeq) };
@@ -1085,7 +1126,7 @@ export function buyRelic(relicId: string): { ok: boolean; reason?: string } {
   const cost = relicCost(def, level);
   if (state.darkMatter < cost) return { ok: false, reason: 'Not enough Dark Matter.' };
   setState((s) => ({ ...s, darkMatter: s.darkMatter - cost, relics: { ...s.relics, [relicId]: level + 1 } }));
-  emit({ type: 'sfx', id: 'buy' });
+  emit({ type: 'sfx', id: 'upgrade' });
   emit({ type: 'confetti', power: 'small' });
   return { ok: true };
 }
@@ -1109,7 +1150,7 @@ export function payGateToll(): { ok: boolean; reason?: string } {
   const toll = nextSectorToll(state);
   if (state.credits < toll) return { ok: false, reason: 'Not enough credits.' };
   setState((s) => {
-    const newGoods = generateSectorGoods(dest);
+    const newGoods = generateSectorGoods(dest, s.runSeed ?? 0);
     const waves = { ...s.waves };
     for (const g of newGoods) if (!waves[g.id]) waves[g.id] = initWave();
     return {

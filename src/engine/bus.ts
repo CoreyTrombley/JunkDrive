@@ -5,7 +5,9 @@
 export type SfxId =
   | 'tap' | 'buy' | 'sell' | 'lucky_flip' | 'streak_up' | 'streak_break'
   | 'rank_up' | 'quest_claim' | 'jump' | 'arrival' | 'event_card'
-  | 'jackpot' | 'coin_cascade' | 'cant_afford' | 'wormhole' | 'toll';
+  | 'jackpot' | 'coin_cascade' | 'cant_afford' | 'wormhole' | 'toll'
+  | 'upgrade' | 'manager_hire' | 'milestone' | 'daily_claim' | 'boost'
+  | 'encounter_good' | 'encounter_bad';
 
 export type HapticId = 'tap' | 'sell' | 'rank_up' | 'jackpot' | 'error';
 

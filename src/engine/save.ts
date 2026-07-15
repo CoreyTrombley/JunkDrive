@@ -42,5 +42,8 @@ export function importSaveCode(code: string): GameState {
   if (!parsed || typeof parsed !== 'object' || typeof parsed.credits !== 'number') {
     throw new Error('Not a valid JUNKRUN save code.');
   }
+  if (typeof (parsed as Record<string, unknown>).runSeed !== 'number') {
+    (parsed as Record<string, unknown>).runSeed = 0;
+  }
   return parsed as GameState;
 }
