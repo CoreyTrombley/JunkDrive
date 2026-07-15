@@ -286,7 +286,7 @@ function processMarketPulses(state: GameState, t: number): GameState {
   const pulses = Math.floor(elapsed / PULSE_INTERVAL_MS);
   const waves = { ...state.waves };
   for (const goodId in waves) {
-    const good = goodById(goodId);
+    const good = goodById(goodId, state.runSeed ?? 0);
     if (!good) continue;
     const w = { value: waves[goodId].value, history: [...waves[goodId].history] };
     fastForwardWave(w, good.volatility, pulses, sessionRng);

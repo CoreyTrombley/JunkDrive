@@ -99,7 +99,7 @@ function simTrader(hours, checkpoints) {
     const good = bestGood(rank), scale = sectorScale(sector);
     const buyPrice = good.base * scale * P.exporterMid;
     const qty = Math.min(hold, Math.floor((credits * 0.9) / buyPrice));
-    const streakMult = 1 + Math.min(4, P.streakCap) * P.streakStep;
+    const streakMult = 1 + Math.min(4, P.streakCap) * P.streakStep; // 4 = typical sustained stacks, deliberately below the in-game cap of 5
     const sellPrice = good.base * scale * P.importerMid * streakMult;
     const profit = Math.max(0, qty * (sellPrice - buyPrice));
     credits += profit; lifetime += profit;
