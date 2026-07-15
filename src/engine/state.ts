@@ -9,7 +9,7 @@ import { SCHEMA_VERSION } from './save';
 
 export const BASE_HOLD = 10;
 export const BASE_MAX_FUEL = 5;
-export const BASE_FUEL_REGEN_SEC = 90;
+export const BASE_FUEL_REGEN_SEC = 75;
 export const STARTING_CREDITS = 500;
 export const STARTING_STATION = 'rust_harbor';
 

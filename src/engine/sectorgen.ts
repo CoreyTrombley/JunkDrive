@@ -79,9 +79,9 @@ export function generateSectorBias(stationIds: string[], goods: Good[], sector: 
     const exporter = pick(rng, stationIds);
     for (const st of stationIds) {
       if (st === exporter) {
-        bias[st][good.id] = randRange(rng, 0.55, 0.7);
-      } else if (chance(rng, 0.35)) {
-        bias[st][good.id] = randRange(rng, 1.25, 1.7);
+        bias[st][good.id] = randRange(rng, 0.50, 0.65);
+      } else if (chance(rng, 0.4)) {
+        bias[st][good.id] = randRange(rng, 1.35, 1.85);
       } else {
         bias[st][good.id] = randRange(rng, 0.9, 1.1);
       }

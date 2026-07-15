@@ -5,7 +5,7 @@ import { STATIONS_BY_ID } from '../config/stations';
 export function maxHold(state: GameState): number {
   const cargoLevel = state.shipUpgrades['cargo_hold'] || 0;
   const relicLevel = state.relics['bigger_bones'] || 0;
-  return BASE_HOLD + cargoLevel * 2 + relicLevel * 4;
+  return BASE_HOLD + cargoLevel * 3 + relicLevel * 4;
 }
 
 export function usedHold(state: GameState): number {
@@ -22,7 +22,7 @@ export function maxFuel(state: GameState): number {
 
 export function fuelRegenSec(state: GameState): number {
   const lvl = state.shipUpgrades['fuel_recycler'] || 0;
-  return Math.max(45, BASE_FUEL_REGEN_SEC - lvl * 9);
+  return Math.max(40, BASE_FUEL_REGEN_SEC - lvl * 7);
 }
 
 export function scanChanceFor(state: GameState, stationId: string): number {

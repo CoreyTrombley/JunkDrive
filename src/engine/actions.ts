@@ -403,7 +403,7 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
   const t = now();
 
   const streakActive = state.hotStreak.expiresAt > t;
-  const streakMult = 1 + Math.min(streakActive ? state.hotStreak.count : 0, 5) * 0.08;
+  const streakMult = 1 + Math.min(streakActive ? state.hotStreak.count : 0, 5) * 0.10;
   const luckyChance = luckyFlipChance(state.relics['lucky_charm'] || 0);
   const isCrit = chance(sessionRng, luckyChance);
   const effPrice = basePrice * streakMult * (isCrit ? 2 : 1);
