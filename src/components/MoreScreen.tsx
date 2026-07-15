@@ -176,6 +176,7 @@ export function MoreScreen() {
           <div class="best-tile"><div class="bt-label">Sales</div><div class="bt-val mono">{formatNum(s.stats.totalSales)}</div></div>
           <div class="best-tile"><div class="bt-label">Rig Taps</div><div class="bt-val mono">{formatNum(s.stats.totalTaps)}</div></div>
           <div class="best-tile"><div class="bt-label">Wormhole Runs</div><div class="bt-val mono">{formatNum(s.stats.totalPrestiges)}</div></div>
+          <div class="best-tile"><div class="bt-label">Active Time</div><div class="bt-val mono">{formatDuration(s.stats.activePlayMs)}</div></div>
           {(() => {
             const sold = topEntry(s.stats.goodsSold);
             const soldGood = sold ? goodById(sold.id) : null;

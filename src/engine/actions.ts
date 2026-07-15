@@ -233,8 +233,17 @@ export function exportSave(): string {
 export function importSave(code: string): { ok: boolean; reason?: string } {
   try {
     const loaded = importSaveCode(code);
-    store.value = loaded;
-    writeSave(loaded);
+    // Same defensive merge as bootGame: saves from before a field existed
+    // (activePlayMs, musicVolume, …) must backfill defaults, and this path
+    // never goes through bootGame.
+    const fresh = createInitialState();
+    const merged: GameState = {
+      ...loaded,
+      settings: { ...fresh.settings, ...loaded.settings },
+      stats: { ...fresh.stats, ...loaded.stats },
+    };
+    store.value = merged;
+    writeSave(merged);
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : 'Invalid save code.' };
@@ -311,6 +320,14 @@ export function tick(): void {
   const t = now();
   setState((s) => {
     let state = s;
+    // Active play time: count small foreground gaps only (the 250ms clock while the
+    // app is open); anything >5s means we were backgrounded/closed, and hidden tabs
+    // don't count even if a throttled interval fires.
+    const dt = t - state.lastSeen;
+    const visible = typeof document === 'undefined' || !document.hidden;
+    if (dt > 0 && dt <= 5000 && visible) {
+      state = { ...state, stats: { ...state.stats, activePlayMs: state.stats.activePlayMs + dt } };
+    }
     state = settleIdleIncome(state, t);
     state = regenFuelState(state, t);
     state = processMarketPulses(state, t);
@@ -1065,7 +1082,7 @@ export function prestige(): { ok: boolean; dmGained?: number } {
       dailyStreak: s.dailyStreak,
       settings: s.settings,
       onboarding: s.onboarding,
-      stats: { ...fresh.stats, totalPrestiges: s.stats.totalPrestiges + 1 },
+      stats: { ...fresh.stats, totalPrestiges: s.stats.totalPrestiges + 1, activePlayMs: s.stats.activePlayMs },
       questIdSeq: s.questIdSeq,
     };
     return { ...merged, quests: generateFullRail(merged, sessionRng, s.questIdSeq) };

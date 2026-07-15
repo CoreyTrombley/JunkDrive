@@ -143,6 +143,7 @@ export interface GameState {
     totalJumps: number; totalSales: number; totalTaps: number; totalPrestiges: number;
     goodsSold: Record<string, number>; goodsBought: Record<string, number>;
     creditsSpent: number; creditsEarned: number;
+    activePlayMs: number;
   };
 
   questIdSeq: number;
@@ -229,6 +230,7 @@ export function createInitialState(): GameState {
     stats: {
       totalJumps: 0, totalSales: 0, totalTaps: 0, totalPrestiges: 0,
       goodsSold: {}, goodsBought: {}, creditsSpent: 0, creditsEarned: 0,
+      activePlayMs: 0,
     },
 
     questIdSeq: 1,
