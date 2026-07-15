@@ -37,6 +37,23 @@ function sectorBiasTable(sector: number, runSeed: number): Record<string, Record
   return table;
 }
 
+/** Per-run re-roll of the hand-authored sector-1 route matrix (same archetype:
+ *  one exporter, ~40% importers). The Signal is excluded — it keeps its flat
+ *  hand-authored 1.10 — and the tutorial scrap route is pinned so Onboarding
+ *  steps 1-3 stay true on every run. */
+function runBiasTableS1(runSeed: number): Record<string, Record<string, number>> {
+  const key = `s1:${runSeed}`;
+  let table = biasCache.get(key);
+  if (!table) {
+    const ids = STATIONS.filter((s) => s.id !== 'the_signal').map((s) => s.id);
+    table = generateSectorBias(ids, GOODS, 1, runSeed);
+    table['rust_harbor']['scrap_metal'] = 0.55;
+    table['neon_bazaar']['scrap_metal'] = 1.45;
+    biasCache.set(key, table);
+  }
+  return table;
+}
+
 export function goodById(goodId: string, runSeed = activeRunSeed()): Good | undefined {
   if (GOODS_BY_ID[goodId]) return GOODS_BY_ID[goodId];
   const m = sectorGoodRe.exec(goodId);
@@ -46,7 +63,10 @@ export function goodById(goodId: string, runSeed = activeRunSeed()): Good | unde
 }
 
 export function biasFor(stationId: string, good: Good, runSeed = activeRunSeed()): number {
-  if (GOODS_BY_ID[good.id]) return stationBias(stationId, good.id);
+  if (GOODS_BY_ID[good.id]) {
+    if (runSeed === 0 || stationId === 'the_signal') return stationBias(stationId, good.id);
+    return runBiasTableS1(runSeed)[stationId]?.[good.id] ?? stationBias(stationId, good.id);
+  }
   const m = sectorGoodRe.exec(good.id);
   const sector = m ? parseInt(m[1], 10) : 2;
   return sectorBiasTable(sector, runSeed)[stationId]?.[good.id] ?? 1;
