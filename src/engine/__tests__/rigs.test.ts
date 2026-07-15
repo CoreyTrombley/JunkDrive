@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../state';
 import { RIGS_BY_ID } from '../../config/rigs';
-import { rigTapPayout, rigEffectiveRatePerSec, rigRatePerSec } from '../formulas';
+import { rigTapPayout, rigEffectiveRatePerSec, rigRatePerSec, globalIncomeMult } from '../formulas';
 
 function stateWithRig(id: string, owned: number, managed = false) {
   const s = createInitialState();
@@ -37,5 +37,17 @@ describe('rig payouts', () => {
     s.bests.bestFlipMargin = 1.0; // +100%, capped at +300%
     expect(rigEffectiveRatePerSec(s, RIGS_BY_ID['salvage_fleet'], Date.now()))
       .toBeCloseTo((160000 / 90) * 1 * 1 * 2, 4);
+  });
+});
+
+describe('yard sector parity', () => {
+  it('yard income scales ×8 per sector like trade prices', () => {
+    const s = createInitialState();
+    const t = Date.now();
+    const base = globalIncomeMult(s, t);
+    s.sector = 2;
+    expect(globalIncomeMult(s, t)).toBeCloseTo(base * 8, 6);
+    s.sector = 3;
+    expect(globalIncomeMult(s, t)).toBeCloseTo(base * 64, 6);
   });
 });

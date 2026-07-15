@@ -2,6 +2,7 @@ import type { Rig } from '../config/types';
 import { MILESTONES } from '../config/rigs';
 import type { GameState } from './state';
 import { CODEX_SETS } from '../config/codex';
+import { sectorScale } from './price';
 
 export function rigUnitCost(rig: Rig, owned: number): number {
   return Math.round(rig.baseCost * Math.pow(rig.costGrowth, owned));
@@ -60,7 +61,9 @@ export function globalIncomeMult(state: GameState, atTime: number): number {
   const codexMult = codexBonusMult(state);
   const ghostFreq = state.codex.jackpots['ghost_frequency'] ? 1.005 : 1;
   const boost = boostActive(state, atTime) ? 2 : 1;
-  return dmMult * rankMult * codexMult * ghostFreq * boost;
+  // Sector parity: trade prices scale ×8 per sector (sectorScale); the Yard gets the
+  // same multiplier so active vs idle balance holds in every sector.
+  return dmMult * rankMult * codexMult * ghostFreq * boost * sectorScale(state.sector);
 }
 
 /** Full per-second rate of a rig's owned units — milestones, global mults and the
