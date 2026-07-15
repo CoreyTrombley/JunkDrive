@@ -54,7 +54,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
   thrum: {
     bpm: 92, leadWave: 'square',
     lead: [0, null, 0, null, 2, null, 0, null, 3, null, 2, null, 0, null, 1, null,
-           0, null, 0, null, 2, null, 4, null, 3, null, 2, null, 1, null, 0, null],
+           0, null, 0, null, 5, null, 4, null, 3, null, 2, null, 1, null, 0, null],
     bass: [0, null, null, 0, null, null, 0, null, 0, null, null, 0, null, null, 2, null],
     kick: [0, 4, 8, 12], hat: [2, 6, 10, 14],
     leadGain: 0.055, bassGain: 0.07, drumGain: 0.05, noteDur: 0.16, bassDur: 0.24,
@@ -65,7 +65,7 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
   plink: {
     bpm: 128, leadWave: 'square',
     lead: [4, null, 2, 4, null, 5, 4, null, 2, null, 1, 2, null, 4, null, null,
-           5, null, 4, 5, null, 7, 5, null, 4, null, 2, 4, null, 1, null, null],
+           5, null, 4, 5, null, 7, 5, null, 4, null, 2, 4, null, 1, 0, null],
     bass: [0, null, 0, null, 3, null, 3, null, 4, null, 4, null, 3, null, 0, null],
     kick: [0, 8], hat: [0, 2, 4, 6, 8, 10, 12, 14],
     leadGain: 0.05, bassGain: 0.06, drumGain: 0.04, noteDur: 0.11, bassDur: 0.18,
@@ -75,13 +75,13 @@ const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
   // Frostdock — icy and spacious: sparse bell lead, slow pulse.
   bell: {
     bpm: 70, leadWave: 'sine',
-    lead: [0, null, null, null, 4, null, null, null, null, null, 2, null, null, null, null, null,
-           5, null, null, null, 4, null, null, null, null, null, 7, null, null, null, null, null],
+    lead: [0, null, null, null, 2, null, null, null, null, null, 1, null, null, null, null, null,
+           3, null, null, null, 2, null, null, null, null, null, 4, null, null, null, null, null],
     bass: [0, null, null, null, null, null, null, null, 2, null, null, null, null, null, null, null],
     kick: [0], hat: [8],
     leadGain: 0.09, bassGain: 0.05, drumGain: 0.02, noteDur: 0.9, bassDur: 1.4,
     bedGain: 0.04, bedWave: 'sine', shimmer: true,
-    arpChord: [0, 4, 7], arpEvery: 8, arpGain: 0.04, bTexture: 'muteDrums',
+    arpChord: [0, 1, 2], arpEvery: 8, arpGain: 0.04, bTexture: 'muteDrums',
   },
   // The Greenhouse — organic drift: legato triangle melody, brushed hats.
   pad: {
