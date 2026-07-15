@@ -58,7 +58,8 @@ export function generateQuest(size: QuestSize, state: GameState, rng: RngFn, seq
 
   const [xMin, xMax] = QUEST_XP_BY_SIZE[size];
   const [pMin, pMax] = QUEST_CREDIT_PCT_BY_SIZE[size];
-  const rewardXp = randInt(rng, xMin, xMax);
+  // Scale with rank so quests stay a real XP source deep into the game
+  const rewardXp = Math.round(randInt(rng, xMin, xMax) * (1 + 0.10 * state.rank));
   const rewardCredits = Math.round(Math.max(15, nw * randRange(rng, pMin, pMax)));
   const rewardBoost = size !== 'tiny' && chance(rng, 0.2);
 

@@ -63,7 +63,7 @@ export function xpToNext(level: number): number {
 
 export function saleXp(profit: number): number {
   if (profit <= 0) return 1;
-  return Math.max(1, Math.ceil(3 * Math.pow(profit, 0.35)));
+  return Math.max(1, Math.ceil(3 * Math.pow(profit, 0.42)));
 }
 
 /** Every rank pays: goodie scaled to net worth (spec §9.1). */
