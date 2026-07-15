@@ -22,6 +22,7 @@ interface NoiseOpts {
   filterFreq?: number;
   filterFreqEnd?: number;
   filterQ?: number;
+  bus?: GainNode | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -31,40 +32,98 @@ interface NoiseOpts {
 // ---------------------------------------------------------------------------
 
 interface AmbiencePattern {
-  stepMs: number;                 // ms between sequencer steps
-  waveform: OscillatorType;       // melody voice timbre
-  noteDur: number;                // seconds each melody note rings
-  gain: number;                   // peak gain per melody note
-  degrees: (number | null)[];     // scale-degree index per step, null = rest
-  bedGain: number;                // gain of the sustained foundation under the melody
-  bedWave: OscillatorType;
-  shimmer?: boolean;              // adds a quiet octave-up partial (bell-like ring)
-  detuneJitter?: number;          // ± cents of random detune per note (eerie/glitchy)
+  bpm: number;                    // sixteenth-note sequencer: stepMs = 15000 / bpm
+  leadWave: OscillatorType;
+  lead: (number | null)[];        // 32 steps (2 bars) of scale-degree indices
+  bass: (number | null)[];        // 16 steps, played one octave down
+  kick: number[];                 // step indices 0-15 with a kick thump
+  hat: number[];                  // step indices 0-15 with a noise tick
+  leadGain: number; bassGain: number; drumGain: number;
+  noteDur: number; bassDur: number;
+  bedGain: number; bedWave: OscillatorType;
+  shimmer?: boolean;              // quiet octave-up partial on lead notes
+  detuneJitter?: number;          // ± cents random detune per lead note
 }
 
 const AMBIENCE_PATTERNS: Record<Ambience, AmbiencePattern> = {
-  // Rust Harbor — industrial home base: a driving low pulse with an occasional accent.
-  thrum: { stepMs: 340, waveform: 'triangle', noteDur: 0.22, gain: 0.09, bedGain: 0.13, bedWave: 'sawtooth', degrees: [0, null, 0, 2, 0, null, 1, null] },
-  // Neon Bazaar — bright, chattery market noise: fast bouncy upper-register hits.
-  plink: { stepMs: 210, waveform: 'sine', noteDur: 0.16, gain: 0.07, bedGain: 0.05, bedWave: 'sine', degrees: [2, 4, 1, 3, null, 2, 4, null] },
-  // Frostdock — icy and spacious: sparse ringing bell tones with a shimmering overtone.
-  bell: { stepMs: 900, waveform: 'sine', noteDur: 1.1, gain: 0.11, bedGain: 0.04, bedWave: 'sine', degrees: [0, null, null, 2, null, 4, null, null], shimmer: true },
-  // The Greenhouse — organic and breathing: a slow overlapping chord that swells and shifts.
-  pad: { stepMs: 1400, waveform: 'sine', noteDur: 2.6, gain: 0.08, bedGain: 0.12, bedWave: 'sine', degrees: [0, 2, 4, 2] },
-  // Ember Works — the forge never sleeps: rhythmic hammer-stab hits, short and percussive.
-  stab: { stepMs: 500, waveform: 'sawtooth', noteDur: 0.14, gain: 0.12, bedGain: 0.09, bedWave: 'sawtooth', degrees: [0, null, 0, null, 2, null, 0, 4] },
-  // Halo Court — opulent and sparkly: a classic up-down arpeggio, glittering and fast.
-  arp: { stepMs: 160, waveform: 'triangle', noteDur: 0.13, gain: 0.075, bedGain: 0.05, bedWave: 'sine', degrees: [0, 1, 2, 3, 4, 3, 2, 1] },
-  // The Signal — mysterious broadcast: a low detuned drone bed with a sparse, eerie phrase.
-  drone: { stepMs: 1800, waveform: 'sine', noteDur: 1.6, gain: 0.09, bedGain: 0.15, bedWave: 'sawtooth', degrees: [0, null, null, null, 3, null, 1, null], detuneJitter: 18 },
+  // Rust Harbor — industrial groove: gritty low riff, driving kick.
+  thrum: {
+    bpm: 92, leadWave: 'square',
+    lead: [0, null, 0, null, 2, null, 0, null, 3, null, 2, null, 0, null, 1, null,
+           0, null, 0, null, 2, null, 4, null, 3, null, 2, null, 1, null, 0, null],
+    bass: [0, null, null, 0, null, null, 0, null, 0, null, null, 0, null, null, 2, null],
+    kick: [0, 4, 8, 12], hat: [2, 6, 10, 14],
+    leadGain: 0.055, bassGain: 0.07, drumGain: 0.05, noteDur: 0.16, bassDur: 0.24,
+    bedGain: 0.09, bedWave: 'sawtooth',
+  },
+  // Neon Bazaar — bright market bounce: fast poppy hook, busy hats.
+  plink: {
+    bpm: 128, leadWave: 'square',
+    lead: [4, null, 2, 4, null, 5, 4, null, 2, null, 1, 2, null, 4, null, null,
+           5, null, 4, 5, null, 7, 5, null, 4, null, 2, 4, null, 1, null, null],
+    bass: [0, null, 0, null, 3, null, 3, null, 4, null, 4, null, 3, null, 0, null],
+    kick: [0, 8], hat: [0, 2, 4, 6, 8, 10, 12, 14],
+    leadGain: 0.05, bassGain: 0.06, drumGain: 0.04, noteDur: 0.11, bassDur: 0.18,
+    bedGain: 0.04, bedWave: 'sine',
+  },
+  // Frostdock — icy and spacious: sparse bell lead, slow pulse.
+  bell: {
+    bpm: 70, leadWave: 'sine',
+    lead: [0, null, null, null, 4, null, null, null, null, null, 2, null, null, null, null, null,
+           5, null, null, null, 4, null, null, null, null, null, 7, null, null, null, null, null],
+    bass: [0, null, null, null, null, null, null, null, 2, null, null, null, null, null, null, null],
+    kick: [0], hat: [8],
+    leadGain: 0.09, bassGain: 0.05, drumGain: 0.02, noteDur: 0.9, bassDur: 1.4,
+    bedGain: 0.04, bedWave: 'sine', shimmer: true,
+  },
+  // The Greenhouse — organic drift: legato triangle melody, brushed hats.
+  pad: {
+    bpm: 80, leadWave: 'triangle',
+    lead: [0, null, null, null, 2, null, null, null, 4, null, null, null, 2, null, null, null,
+           5, null, null, null, 4, null, null, null, 2, null, null, null, 1, null, null, null],
+    bass: [0, null, null, null, null, null, null, null, 3, null, null, null, null, null, null, null],
+    kick: [], hat: [4, 12],
+    leadGain: 0.06, bassGain: 0.06, drumGain: 0.02, noteDur: 0.7, bassDur: 1.6,
+    bedGain: 0.11, bedWave: 'sine',
+  },
+  // Ember Works — the forge: hammering saw riff, four-on-the-floor.
+  stab: {
+    bpm: 100, leadWave: 'sawtooth',
+    lead: [0, 0, null, 0, null, 2, null, null, 0, 0, null, 3, null, 2, null, null,
+           0, 0, null, 0, null, 4, null, null, 5, null, 4, null, 2, null, 0, null],
+    bass: [0, null, 0, null, 0, null, 0, null, 0, null, 0, null, 2, null, 2, null],
+    kick: [0, 4, 8, 12], hat: [2, 6, 10, 14],
+    leadGain: 0.06, bassGain: 0.07, drumGain: 0.055, noteDur: 0.12, bassDur: 0.16,
+    bedGain: 0.07, bedWave: 'sawtooth',
+  },
+  // Halo Court — opulent sparkle: fast up-down arpeggio, glittery hats.
+  arp: {
+    bpm: 140, leadWave: 'triangle',
+    lead: [0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 0, null,
+           1, 2, 5, 7, 5, 2, 1, 2, 5, 7, 9, 7, 5, 2, 1, null],
+    bass: [0, null, null, null, 4, null, null, null, 5, null, null, null, 4, null, null, null],
+    kick: [0, 8], hat: [0, 2, 4, 6, 8, 10, 12, 14],
+    leadGain: 0.045, bassGain: 0.055, drumGain: 0.03, noteDur: 0.1, bassDur: 0.5,
+    bedGain: 0.04, bedWave: 'sine', shimmer: true,
+  },
+  // The Signal — eerie broadcast: sparse detuned phrase over a heavy drone.
+  drone: {
+    bpm: 60, leadWave: 'sine',
+    lead: [0, null, null, null, null, null, 3, null, null, null, 1, null, null, null, null, null,
+           null, null, 0, null, null, null, 6, null, null, null, null, null, 3, null, null, null],
+    bass: [0, null, null, null, null, null, null, null, null, null, null, null, 1, null, null, null],
+    kick: [0], hat: [],
+    leadGain: 0.07, bassGain: 0.06, drumGain: 0.03, noteDur: 1.2, bassDur: 2.2,
+    bedGain: 0.13, bedWave: 'sawtooth', detuneJitter: 18,
+  },
 };
 
-/** Normalizes any station's 2-4 note motif into a fixed 5-degree scale (wrapping up an
+/** Normalizes any station's 2-4 note motif into a fixed 10-degree scale (wrapping up an
  *  octave each time the motif repeats), so the same index-based patterns above work for
  *  every station while still sounding like *that station's* own musical signature. */
 function buildScale(motif: number[]): number[] {
   const base = motif && motif.length ? motif : [220, 277];
-  const degrees = 5;
+  const degrees = 10;
   const scale: number[] = [];
   for (let i = 0; i < degrees; i++) {
     const octave = Math.floor(i / base.length);
@@ -196,7 +255,8 @@ class Synth {
 
   private noise(dur: number, opts: NoiseOpts = {}): void {
     const ctx = this.ctx;
-    if (!ctx || !this.sfxGain || !this.noiseBuffer) return;
+    const bus = opts.bus ?? this.sfxGain;
+    if (!ctx || !bus || !this.noiseBuffer) return;
     const t0 = ctx.currentTime + (opts.delay ?? 0);
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
@@ -212,7 +272,7 @@ class Synth {
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(filt);
     filt.connect(g);
-    g.connect(this.sfxGain);
+    g.connect(bus);
     src.start(t0);
     src.stop(t0 + dur + 0.03);
   }
@@ -336,24 +396,44 @@ class Synth {
     this.ambienceOsc = [o1, o2];
     this.ambienceEnv = env;
 
-    // The actual tune: a small sequencer stepping through a pattern built from the
-    // station's own motif, so every station has real melodic movement, not just a hum.
+    // Three-voice chiptune sequencer with lookahead scheduling: notes are placed on
+    // an absolute AudioContext timeline (drift-free), the JS timer only wakes up to
+    // top up the schedule. 32-step lead over 16-step bass/drum bars.
+    const stepSec = 15 / cfg.bpm; // sixteenth note
     let step = 0;
-    const advance = () => {
-      const degree = cfg.degrees[step % cfg.degrees.length];
-      if (degree !== null) {
-        const octaveFlip = Math.random() < 0.12 ? 2 : 1;
-        const freq = scale[degree] * octaveFlip;
-        const detune = cfg.detuneJitter ? (Math.random() * 2 - 1) * cfg.detuneJitter : 0;
-        this.tone(freq, cfg.noteDur, { type: cfg.waveform, gain: cfg.gain, detuneCents: detune, bus: this.musicBus });
-        if (cfg.shimmer) {
-          this.tone(freq * 2, cfg.noteDur * 0.6, { type: 'sine', gain: cfg.gain * 0.35, delay: 0.02, bus: this.musicBus });
+    let nextStepTime = ctx.currentTime + 0.1;
+    const scheduleStep = () => {
+      const c = this.ctx;
+      if (!c) return;
+      while (nextStepTime < c.currentTime + 0.2) {
+        const delay = Math.max(0, nextStepTime - c.currentTime);
+        const bar = step % 16;
+        const leadDeg = cfg.lead[step % cfg.lead.length];
+        if (leadDeg !== null && leadDeg !== undefined) {
+          const detune = cfg.detuneJitter ? (Math.random() * 2 - 1) * cfg.detuneJitter : 0;
+          const freq = scale[Math.min(leadDeg, scale.length - 1)];
+          this.tone(freq, cfg.noteDur, { type: cfg.leadWave, gain: cfg.leadGain, delay, detuneCents: detune, bus: this.musicBus });
+          if (cfg.shimmer) {
+            this.tone(freq * 2, cfg.noteDur * 0.6, { type: 'sine', gain: cfg.leadGain * 0.35, delay: delay + 0.02, bus: this.musicBus });
+          }
         }
+        const bassDeg = cfg.bass[bar];
+        if (bassDeg !== null && bassDeg !== undefined) {
+          this.tone(scale[Math.min(bassDeg, scale.length - 1)] / 2, cfg.bassDur, { type: 'triangle', gain: cfg.bassGain, delay, bus: this.musicBus });
+        }
+        if (cfg.kick.includes(bar)) {
+          // kick: fast sine drop 120→45 Hz
+          this.tone(45, 0.12, { type: 'sine', startFreq: 120, gain: cfg.drumGain * 2.2, delay, bus: this.musicBus });
+        }
+        if (cfg.hat.includes(bar)) {
+          this.noise(0.03, { gain: cfg.drumGain, filterType: 'highpass', filterFreq: 8000, delay, bus: this.musicBus });
+        }
+        step++;
+        nextStepTime += stepSec;
       }
-      step++;
-      this.ambienceTimer = window.setTimeout(advance, cfg.stepMs);
+      this.ambienceTimer = window.setTimeout(scheduleStep, stepSec * 500); // ~half a step, in ms
     };
-    this.ambienceTimer = window.setTimeout(advance, cfg.stepMs * 0.5);
+    scheduleStep();
   }
 
   stopAmbience(): void {
