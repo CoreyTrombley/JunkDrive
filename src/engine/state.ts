@@ -155,6 +155,10 @@ export interface GameState {
   /** Gate Resonance charges toward the NEXT sector's gate; earned in-sector, resets on entry. */
   gateResonance: number;
 
+  /** Normalized moved-profit accumulated per good since last docking — each good
+   *  earns at most ONE flip charge per stop, however the sale is split. */
+  flipProgress: Record<string, number>;
+
   /** One-shot flag: a >S99 legacy save was clamped on load; App shows the monument moment once. */
   pendingRimClamp: boolean;
 
@@ -247,6 +251,7 @@ export function createInitialState(): GameState {
     visitedBeacons: [],
 
     gateResonance: 0,
+    flipProgress: {},
     pendingRimClamp: false,
 
     settings: {

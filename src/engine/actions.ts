@@ -169,6 +169,7 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
     visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
     gateResonance: (loaded as Partial<GameState>).gateResonance ?? 0,
+    flipProgress: (loaded as Partial<GameState>).flipProgress ?? {},
     pendingRimClamp: (loaded as Partial<GameState>).pendingRimClamp ?? false,
   };
 
@@ -273,6 +274,7 @@ export function importSave(code: string): { ok: boolean; reason?: string } {
       lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
       visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
       gateResonance: loaded.gateResonance ?? 0,
+      flipProgress: loaded.flipProgress ?? {},
       pendingRimClamp: loaded.pendingRimClamp ?? false,
     };
     store.value = merged;
@@ -513,9 +515,15 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
       },
     };
     st = stampCodex(st, 'goods', goodId);
-    if (profit / sectorScale(s.sector) >= RESONANCE_FLIP_FLOOR && entry.srcStation !== s.currentStation) {
-      st = { ...st, gateResonance: st.gateResonance + 1 };
-      if (s.sector < SECTOR_CAP && resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+1 ⚡', kind: 'info' });
+    if (profit > 0 && entry.srcStation !== s.currentStation && s.sector < SECTOR_CAP) {
+      const prev = st.flipProgress[goodId] ?? 0;
+      const next = prev + profit / sectorScale(s.sector);
+      st = { ...st, flipProgress: { ...st.flipProgress, [goodId]: next } };
+      // One charge per good per docking: award only on the first crossing of the floor.
+      if (prev < RESONANCE_FLIP_FLOOR && next >= RESONANCE_FLIP_FLOOR) {
+        st = { ...st, gateResonance: st.gateResonance + 1 };
+        if (resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+1 ⚡', kind: 'info' });
+      }
     }
     st = applyXpAndRankUps(st);
     st = progressQuests(st, (q) => {
@@ -569,9 +577,9 @@ export function deliverManifest(manifestId: string): { ok: boolean; reason?: str
       bests: { ...s.bests, biggestSale: Math.max(s.bests.biggestSale, m.rewardCredits) },
     };
     const itemsMoved = m.items.every((it) => s.cargo[it.goodId]?.srcStation !== m.stationId);
-    if (itemsMoved) {
+    if (itemsMoved && s.sector < SECTOR_CAP) {
       st = { ...st, gateResonance: st.gateResonance + 3 };
-      if (s.sector < SECTOR_CAP && resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+3 ⚡', kind: 'info' });
+      if (resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+3 ⚡', kind: 'info' });
     }
     st = applyXpAndRankUps(st);
     st = progressQuests(st, (q) => (q.kind === 'deliver_manifest' ? { ...q, progress: q.goal } : q));
@@ -675,7 +683,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
         const good = pick(sessionRng, unlocked);
         const qty = Math.min(randInt(sessionRng, 1, 3), freeCapacityUnits(st, good.id));
         if (qty > 0) {
-          st = { ...st, cargo: addCargo(st.cargo, good.id, qty, 0) };
+          st = { ...st, cargo: addCargo(st.cargo, good.id, qty, 0, st.currentStation) };
           setToast({ text: `Found ${qty}× ${good.name} floating by. Finders keepers.`, icon: good.icon });
         }
       }
@@ -708,7 +716,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
         // roughly mass-independent instead of scaling with 1/mass.
         const budgetUnits = Math.max(3, Math.floor((maxHold(st) * 0.5) / good.mass));
         const free = Math.min(freeCapacityUnits(st, good.id), budgetUnits, 60);
-        if (free > 0) st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0) };
+        if (free > 0) st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0, st.currentStation) };
       } else if (jackpotId === 'golden_buyer') {
         const ev: ActiveMarketEvent = {
           id: `golden-${t}`, kind: 'golden_buyer', stationId: st.currentStation, goodId: null,
@@ -735,7 +743,7 @@ export function completeJump(
     const map = generateSectorMap(s.sector, s.runSeed ?? 0);
     const node = nodeById(map, targetNodeId);
     const isStation = node?.kind === 'station';
-    let state: GameState = { ...s, currentStation: targetNodeId, stats: { ...s.stats, totalJumps: s.stats.totalJumps + 1 } };
+    let state: GameState = { ...s, currentStation: targetNodeId, flipProgress: {}, stats: { ...s.stats, totalJumps: s.stats.totalJumps + 1 } };
     if (isStation) state = stampCodex(state, 'stations', targetNodeId);
     // Real-time pulses (tick/bootGame) do stock regen; this arrival-forced pulse
     // only fast-forwards waves so hopping doesn't heal perturbed stocks for free.
@@ -838,7 +846,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
             const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 3);
             const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
             const qty = Math.min(randInt(sessionRng, minQ, maxQ), freeCapacityUnits(st, good.id));
-            st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
+            st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0, st.currentStation) };
             resultText = qty > 0 ? `Salvaged ${qty}× ${good.name}. Free loot.` : 'Hold was full — grabbed nothing.';
             outcome = 'good';
           } else {
@@ -868,7 +876,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           const cost = dealPrice * qty;
           const isGoodDeal = chance(sessionRng, goodOdds) || rolodex;
           if (qty > 0 && st.credits >= cost && isGoodDeal) {
-            st = { ...st, credits: st.credits - cost, cargo: addCargo(st.cargo, good.id, qty, dealPrice) };
+            st = { ...st, credits: st.credits - cost, cargo: addCargo(st.cargo, good.id, qty, dealPrice, st.currentStation) };
             resultText = `Bought ${qty}× ${good.name} at ${Math.round((1 - pct) * 100)}% off galactic average.`;
             outcome = 'good';
           } else {
@@ -915,7 +923,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
               const unlocked = allUnlockedGoods(st);
               const good = unlocked.length ? pick(sessionRng, unlocked) : GOODS[0];
               const qty = Math.min(randInt(sessionRng, 2, 5), freeCapacityUnits(st, good.id));
-              st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
+              st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0, st.currentStation) };
               resultText = `They gave you ${qty}× ${good.name} in thanks.`;
               outcome = 'good';
             } else {
@@ -1279,6 +1287,7 @@ export function nextSectorToll(state: GameState): number {
 
 export function payGateToll(): { ok: boolean; reason?: string } {
   const state = getState();
+  if (state.sector >= SECTOR_CAP) return { ok: false, reason: 'The lanes end here.' };
   const dest = state.sector + 1;
   if (!canEnterNextSector(state)) return { ok: false, reason: `Unlocks at Rank ${sectorUnlockRank(dest)}.` };
   const map = generateSectorMap(state.sector, state.runSeed ?? 0);
@@ -1298,6 +1307,7 @@ export function payGateToll(): { ok: boolean; reason?: string } {
       credits: s.credits - toll,
       sector: dest,
       gateResonance: 0,
+      flipProgress: {},
       currentStation: 'rust_harbor',
       maxSectorReached: Math.max(s.maxSectorReached, dest),
       waves,
@@ -1354,7 +1364,7 @@ export function claimSalvage(): { ok: boolean; reason?: string } {
     ...s,
     cargo: addCargo(s.cargo, good.id, qty, 0, s.currentStation),
     lastSalvageAt: { ...s.lastSalvageAt, [s.currentStation]: t },
-    gateResonance: s.gateResonance + 1,
+    gateResonance: s.sector < SECTOR_CAP ? s.gateResonance + 1 : s.gateResonance,
   }));
   emit({ type: 'sfx', id: 'salvage' });
   emit({ type: 'toast', text: `Hauled in ${qty}× ${good.name}.`, icon: good.icon });

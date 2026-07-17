@@ -185,7 +185,11 @@ export function MoreScreen() {
                     onClick={() =>
                       emit({
                         type: 'toast',
-                        text: bucket[id] ? codexName(set.kind, id) : CODEX_HINTS[set.kind] ?? '???',
+                        text: bucket[id]
+                          ? codexName(set.kind, id)
+                          : set.id === 'honor_badges'
+                            ? 'A monument. Some things must be walked, not found.'
+                            : CODEX_HINTS[set.kind] ?? '???',
                         icon: bucket[id] ? codexIcon(set.kind, id) : '❔',
                       })
                     }

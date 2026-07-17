@@ -184,6 +184,7 @@ const resonanceNeeded = (d) => (d <= 10 ? 0 : Math.ceil(6 * Math.pow(1.062, d - 
 // 1 qualifying flip + 30% manifests (+3) + 10% salvage (+1) = 2.0
 // (valid because resonance requires MOVED goods — wash-trades and at-the-door
 // manifest buys earn nothing, so a charge really costs a travel loop)
+// (flip charges are per-good-per-docking, so chunked sales cannot inflate the rate)
 const LOOP_EARLY = 2 * 1.8 * 1.15 * 65 + 2 * 1.8 * 3 + 25;
 const LOOP_LATE = 2 * 1.8 * 1.15 * 35 + 2 * 1.8 * 3 + 25;
 const CHARGES_PER_LOOP = 1 + 0.3 * 3 + 0.1;

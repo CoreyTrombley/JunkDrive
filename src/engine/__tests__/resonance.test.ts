@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../state';
 import { store } from '../store';
-import { sellGood, deliverManifest, payGateToll } from '../actions';
+import { sellGood, deliverManifest, payGateToll, completeJump } from '../actions';
 import { generateSectorMap, nodeById } from '../mapgen';
 import { generateManifest } from '../manifests';
 import { sectorScale } from '../price';
@@ -88,5 +88,25 @@ describe('gate resonance', () => {
     expect(store.value.cargo['warp_cells'].srcStation).toBe(s.currentStation); // provenance survives
     expect(sellGood('warp_cells', 19).ok).toBe(true);  // sell the rest, same station
     expect(store.value.gateResonance).toBe(0);         // still a wash trade — zero charges
+  });
+
+  it('chunking a MOVED sale still earns exactly one charge per good per docking', () => {
+    const s = createInitialState();
+    s.rank = 10;
+    s.cargo = { warp_cells: { qty: 20, avgCost: 1, srcStation: 'frostdock' } };
+    store.value = s;
+    for (let i = 0; i < 20; i++) expect(sellGood('warp_cells', 1).ok).toBe(true);
+    expect(store.value.gateResonance).toBe(1); // 20 chunked sales, one crossing, one charge
+  });
+
+  it('flip progress resets on docking', () => {
+    const s = createInitialState();
+    s.flipProgress = { warp_cells: 99999 };
+    store.value = s;
+    const map = generateSectorMap(s.sector, s.runSeed ?? 0);
+    const lane = map.lanes.find((l) => l.a === s.currentStation || l.b === s.currentStation)!;
+    const target = lane.a === s.currentStation ? lane.b : lane.a;
+    completeJump(target, { finalStop: false });
+    expect(store.value.flipProgress).toEqual({});
   });
 });
