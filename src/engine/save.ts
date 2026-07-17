@@ -45,5 +45,12 @@ export function importSaveCode(code: string): GameState {
   if (typeof (parsed as Record<string, unknown>).runSeed !== 'number') {
     (parsed as Record<string, unknown>).runSeed = 0;
   }
+  if (typeof (parsed as Record<string, unknown>).stocks !== 'object' || (parsed as Record<string, unknown>).stocks === null) {
+    (parsed as Record<string, unknown>).stocks = {};
+  }
+  if (!Array.isArray((parsed as Record<string, unknown>).manifests)) (parsed as Record<string, unknown>).manifests = [];
+  if (typeof (parsed as Record<string, unknown>).manifestSeq !== 'number') (parsed as Record<string, unknown>).manifestSeq = 1;
+  if (typeof (parsed as Record<string, unknown>).lastSalvageAt !== 'object' || (parsed as Record<string, unknown>).lastSalvageAt === null) (parsed as Record<string, unknown>).lastSalvageAt = {};
+  if (!Array.isArray((parsed as Record<string, unknown>).visitedBeacons)) (parsed as Record<string, unknown>).visitedBeacons = [];
   return parsed as GameState;
 }

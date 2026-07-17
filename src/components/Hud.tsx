@@ -6,6 +6,7 @@ import { titleForRank } from '../config/ranks';
 import { STATIONS_BY_ID } from '../config/stations';
 import { goodById } from '../engine/pricing';
 import { canClaimDailyStreak } from '../engine/actions';
+import { stationDisplayName } from '../engine/sectorgen';
 
 export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
   const s = store.value;
@@ -24,12 +25,14 @@ export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
   const questReady = s.quests.some((q) => q.progress >= q.goal);
   if (questReady) tickerItems.push('✅ A quest is ready to claim!');
   if (s.boostTokens > 0) tickerItems.push(`🚀 ${s.boostTokens} Boost Token${s.boostTokens > 1 ? 's' : ''} ready — MORE tab`);
+  const readyManifest = s.manifests?.find((m) => m.expiresAt > t && s.currentStation === m.stationId && m.items.every((it) => (s.cargo[it.goodId]?.qty ?? 0) >= it.qty));
+  if (readyManifest) tickerItems.push('📦 Contract ready to deliver HERE — MAP tab');
   if (canClaimDailyStreak(s)) tickerItems.push('🎁 Daily crate ready — MORE tab');
   for (const ev of s.activeEvents.filter((e) => e.expiresAt > t).slice(0, 3)) {
     const station = STATIONS_BY_ID[ev.stationId];
     const good = ev.goodId ? goodById(ev.goodId) : null;
     const label = good ? `${good.icon} ${good.name}` : 'Everything';
-    tickerItems.push(`📈 ${label} ${ev.disables ? 'blocked' : `×${ev.multiplier.toFixed(1)}`} @ ${station?.name ?? '?'} — ${formatDuration(ev.expiresAt - t)}`);
+    tickerItems.push(`📈 ${label} ${ev.disables ? 'blocked' : `×${ev.multiplier.toFixed(1)}`} @ ${station ? stationDisplayName(station.id, s.sector, s.runSeed ?? 0) : '?'} — ${formatDuration(ev.expiresAt - t)}`);
   }
   if (tickerItems.length === 0) tickerItems.push('🛰️ All quiet in The Drift…');
 

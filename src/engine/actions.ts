@@ -21,6 +21,7 @@ import {
   pulseWave, fastForwardWave, PULSE_INTERVAL_MS, initWave, type ActiveMarketEvent,
 } from './price';
 import { goodById, getPrice, isTradeDisabled, allUnlockedGoods } from './pricing';
+import { applyStockTrade, regenStocks } from './stocks';
 import {
   rigUnitCost, rigBatchCost, maxAffordableRigQty, milestoneMultiplier,
   codexBonusMult, globalIncomeMult, totalYardRatePerSec, gateToll,
@@ -28,13 +29,15 @@ import {
   rigTapPayout,
 } from './formulas';
 import {
-  maxHold, usedHold, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
+  maxHold, usedHold, freeCapacityUnits, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
   goldenRolodexActive, eventMagnetActive, tollDiscount,
 } from './derived';
 import { mulberry32, randRange, randInt, chance, pickWeighted, pick, shuffle, type RngFn } from './rng';
 import { generateQuest, generateFullRail } from './quests';
-import { generateSectorGoods } from './sectorgen';
+import { generateManifest, canDeliver, MANIFEST_SLOTS, type Manifest } from './manifests';
+import { generateSectorGoods, stationDisplayName } from './sectorgen';
 import { loadSave, writeSave, exportSaveCode, importSaveCode } from './save';
+import { generateSectorMap, laneBetween, nodeById, GATE_NODE_ID, WAYPOINT_THEME, type MapLane } from './mapgen';
 import { now } from './time';
 import { formatSignedCredits } from './num';
 import { maybeOfferInstall } from './installPrompt';
@@ -160,6 +163,11 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     settings: { ...fresh.settings, ...loaded.settings },
     stats: { ...fresh.stats, ...loaded.stats },
     runSeed: typeof loaded.runSeed === 'number' ? loaded.runSeed : 0,
+    stocks: (loaded as Partial<GameState>).stocks ?? {},
+    manifests: (loaded as Partial<GameState>).manifests ?? [],
+    manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
+    lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
+    visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
   };
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
@@ -192,6 +200,7 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
 
   const offlineReport = elapsed > 30_000 ? { amount: earned, elapsedMs: elapsed, capped: elapsed > cap } : null;
   state = { ...state, pendingOfflineReport: offlineReport, lastSeen: t };
+  state = maintainManifests(state, t);
 
   store.value = state;
   return { offlineReport };
@@ -241,6 +250,11 @@ export function importSave(code: string): { ok: boolean; reason?: string } {
       ...loaded,
       settings: { ...fresh.settings, ...loaded.settings },
       stats: { ...fresh.stats, ...loaded.stats },
+      stocks: loaded.stocks ?? {},
+      manifests: (loaded as Partial<GameState>).manifests ?? [],
+      manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
+      lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
+      visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
     };
     store.value = merged;
     writeSave(merged);
@@ -280,7 +294,7 @@ function regenFuelState(state: GameState, t: number): GameState {
   return { ...state, fuel: newFuel, lastFuelUpdateAt: t };
 }
 
-function processMarketPulses(state: GameState, t: number): GameState {
+function processMarketPulses(state: GameState, t: number, opts: { skipStockRegen?: boolean } = {}): GameState {
   const elapsed = t - state.lastMarketPulseAt;
   if (elapsed < PULSE_INTERVAL_MS) return state;
   const pulses = Math.floor(elapsed / PULSE_INTERVAL_MS);
@@ -292,7 +306,9 @@ function processMarketPulses(state: GameState, t: number): GameState {
     fastForwardWave(w, good.volatility, pulses, sessionRng);
     waves[goodId] = w;
   }
-  return { ...state, waves, lastMarketPulseAt: state.lastMarketPulseAt + pulses * PULSE_INTERVAL_MS };
+  state = { ...state, waves, lastMarketPulseAt: state.lastMarketPulseAt + pulses * PULSE_INTERVAL_MS };
+  if (!opts.skipStockRegen) state = regenStocks(state, pulses);
+  return state;
 }
 
 function maybeSpawnAmbientEvent(state: GameState, t: number): GameState {
@@ -316,6 +332,21 @@ function expireTimers(state: GameState, t: number): GameState {
   return st;
 }
 
+function maintainManifests(state: GameState, t: number): GameState {
+  const live = state.manifests.filter((m) => m.expiresAt > t);
+  if (live.length >= MANIFEST_SLOTS) return live.length === state.manifests.length ? state : { ...state, manifests: live };
+  let st: GameState = { ...state, manifests: live };
+  const added: Manifest[] = [];
+  let seq = st.manifestSeq;
+  while (live.length + added.length < MANIFEST_SLOTS) {
+    added.push(generateManifest(st, sessionRng, seq, t));
+    seq++;
+  }
+  st = { ...st, manifests: [...live, ...added], manifestSeq: seq };
+  if (added.length && state.manifests.length > 0) emit({ type: 'sfx', id: 'manifest_new' });
+  return st;
+}
+
 export function tick(): void {
   const t = now();
   setState((s) => {
@@ -333,6 +364,7 @@ export function tick(): void {
     state = processMarketPulses(state, t);
     state = maybeSpawnAmbientEvent(state, t);
     state = expireTimers(state, t);
+    state = maintainManifests(state, t);
     state = { ...state, lastSeen: t };
     return state;
   });
@@ -384,8 +416,7 @@ export function buyGood(goodId: string, qty: number): { ok: boolean; reason?: st
   const station = STATIONS_BY_ID[state.currentStation];
   if (station && good.tier < station.minGoodTier) return { ok: false, reason: 'Not stocked here.' };
   if (isTradeDisabled(state.activeEvents, state.currentStation, goodId, now())) return { ok: false, reason: 'Embargoed here right now.' };
-  const free = maxHold(state) - usedHold(state);
-  const buyQty = Math.min(qty, free);
+  const buyQty = Math.min(qty, freeCapacityUnits(state, goodId));
   if (buyQty <= 0) return { ok: false, reason: 'Cargo hold full.' };
   const price = getPrice(state, state.currentStation, goodId);
   const cost = price * buyQty;
@@ -394,16 +425,20 @@ export function buyGood(goodId: string, qty: number): { ok: boolean; reason?: st
     emit({ type: 'haptic', pattern: 'error' });
     return { ok: false, reason: 'Not enough credits.' };
   }
-  setState((s) => ({
-    ...s,
-    credits: s.credits - cost,
-    cargo: addCargo(s.cargo, goodId, buyQty, price),
-    stats: {
-      ...s.stats,
-      creditsSpent: s.stats.creditsSpent + cost,
-      goodsBought: { ...s.stats.goodsBought, [goodId]: (s.stats.goodsBought[goodId] ?? 0) + buyQty },
-    },
-  }));
+  setState((s) => {
+    let st: GameState = {
+      ...s,
+      credits: s.credits - cost,
+      cargo: addCargo(s.cargo, goodId, buyQty, price),
+      stats: {
+        ...s.stats,
+        creditsSpent: s.stats.creditsSpent + cost,
+        goodsBought: { ...s.stats.goodsBought, [goodId]: (s.stats.goodsBought[goodId] ?? 0) + buyQty },
+      },
+    };
+    st = applyStockTrade(st, s.currentStation, goodId, -buyQty);
+    return st;
+  });
   emit({ type: 'sfx', id: 'buy' });
   emit({ type: 'haptic', pattern: 'tap' });
   emit({ type: 'floater', text: formatSignedCredits(-cost), kind: 'info' });
@@ -467,6 +502,7 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
       return q;
     });
     st = checkMilestones(st);
+    st = applyStockTrade(st, s.currentStation, goodId, sellQty);
     return st;
   });
 
@@ -483,21 +519,65 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
   return { ok: true, profit, isCrit, qty: sellQty };
 }
 
+export function deliverManifest(manifestId: string): { ok: boolean; reason?: string; credits?: number } {
+  const state = getState();
+  const m = state.manifests.find((x) => x.id === manifestId);
+  if (!m) return { ok: false, reason: 'Contract expired.' };
+  if (state.currentStation !== m.stationId) return { ok: false, reason: 'Deliver at the named station.' };
+  if (!canDeliver(state, m)) return { ok: false, reason: 'Cargo incomplete.' };
+  const t = now();
+  setState((s) => {
+    const cargo = { ...s.cargo };
+    for (const it of m.items) {
+      const entry = cargo[it.goodId];
+      const remaining = entry.qty - it.qty;
+      if (remaining <= 0) delete cargo[it.goodId];
+      else cargo[it.goodId] = { ...entry, qty: remaining };
+    }
+    let st: GameState = {
+      ...s,
+      cargo,
+      credits: s.credits + m.rewardCredits,
+      lifetimeEarnings: s.lifetimeEarnings + m.rewardCredits,
+      xp: s.xp + m.rewardXp,
+      manifests: s.manifests.filter((x) => x.id !== m.id),
+      stats: { ...s.stats, totalSales: s.stats.totalSales + 1, creditsEarned: s.stats.creditsEarned + m.rewardCredits },
+      bests: { ...s.bests, biggestSale: Math.max(s.bests.biggestSale, m.rewardCredits) },
+    };
+    st = applyXpAndRankUps(st);
+    st = progressQuests(st, (q) => (q.kind === 'deliver_manifest' ? { ...q, progress: q.goal } : q));
+    st = maintainManifests(st, t);
+    st = checkMilestones(st);
+    return st;
+  });
+  emit({ type: 'sfx', id: 'manifest_deliver' });
+  emit({ type: 'haptic', pattern: 'sell' });
+  emit({ type: 'confetti', power: 'small' });
+  emit({ type: 'floater', text: formatSignedCredits(m.rewardCredits), kind: 'profit' });
+  return { ok: true, credits: m.rewardCredits };
+}
+
 // ---------------------------------------------------------------------------
 // Jumping / arrivals
 // ---------------------------------------------------------------------------
 
-export function startJump(targetStationId: string): { ok: boolean; reason?: string } {
+export function startJump(targetNodeId: string): { ok: boolean; reason?: string; lane?: MapLane } {
   const state = getState();
-  const target = STATIONS_BY_ID[targetStationId];
-  if (!target) return { ok: false, reason: 'Unknown station.' };
-  if (target.unlockRank > state.rank) return { ok: false, reason: `Unlocks at Rank ${target.unlockRank}.` };
-  if (targetStationId === state.currentStation) return { ok: false, reason: 'Already docked here.' };
-  if (state.fuel < 1) return { ok: false, reason: 'Out of fuel.' };
-  setState((s) => ({ ...s, fuel: s.fuel - 1 }));
+  const map = generateSectorMap(state.sector, state.runSeed ?? 0);
+  const target = nodeById(map, targetNodeId);
+  if (!target) return { ok: false, reason: 'Unknown destination.' };
+  if (target.kind === 'station' && STATIONS_BY_ID[target.id] && STATIONS_BY_ID[target.id].unlockRank > state.rank) {
+    return { ok: false, reason: `Unlocks at Rank ${STATIONS_BY_ID[target.id].unlockRank}.` };
+  }
+  if (targetNodeId === state.currentStation) return { ok: false, reason: 'Already docked here.' };
+  const lane = laneBetween(map, state.currentStation, targetNodeId);
+  if (!lane) return { ok: false, reason: 'No warp lane from here.' };
+  if (state.fuel < lane.fuel) return { ok: false, reason: 'Out of fuel.' };
+  setState((s) => ({ ...s, fuel: s.fuel - lane.fuel }));
   emit({ type: 'sfx', id: 'jump' });
+  if (lane.trait === 'express') emit({ type: 'sfx', id: 'express' });
   emit({ type: 'haptic', pattern: 'tap' });
-  return { ok: true };
+  return { ok: true, lane };
 }
 
 interface RolledArrival {
@@ -545,7 +625,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
         st = { ...st, activeEvents: trimmed };
         st = stampCodex(st, 'events', events[0].kind);
         const def = MARKET_EVENTS_BY_ID[events[0].kind];
-        const stationName = STATIONS_BY_ID[events[0].stationId]?.name ?? '?';
+        const stationName = stationDisplayName(events[0].stationId, st.sector, st.runSeed ?? 0);
         const goodName = events[0].goodId ? goodById(events[0].goodId)?.name ?? '?' : '';
         const text = def.copyTemplate
           .replace('{station}', stationName)
@@ -564,7 +644,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
       const unlocked = allUnlockedGoods(st);
       if (unlocked.length) {
         const good = pick(sessionRng, unlocked);
-        const qty = Math.min(randInt(sessionRng, 1, 3), maxHold(st) - usedHold(st));
+        const qty = Math.min(randInt(sessionRng, 1, 3), freeCapacityUnits(st, good.id));
         if (qty > 0) {
           st = { ...st, cargo: addCargo(st.cargo, good.id, qty, 0) };
           setToast({ text: `Found ${qty}× ${good.name} floating by. Finders keepers.`, icon: good.icon });
@@ -591,13 +671,15 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
       emit({ type: 'haptic', pattern: 'jackpot' });
       emit({ type: 'confetti', power: 'big' });
       if (jackpotId === 'motherlode') {
-        const free = maxHold(st) - usedHold(st);
-        if (free > 0) {
-          const bestTier = bestUnlockedTier(st.rank);
-          const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 5);
-          const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
-          st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0) };
-        }
+        const bestTier = bestUnlockedTier(st.rank);
+        const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 5);
+        const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
+        // Windfall budget: up to half the hold's tonnage in this good, at least 3
+        // units when space exists, never more than 60 — keeps the jackpot's value
+        // roughly mass-independent instead of scaling with 1/mass.
+        const budgetUnits = Math.max(3, Math.floor((maxHold(st) * 0.5) / good.mass));
+        const free = Math.min(freeCapacityUnits(st, good.id), budgetUnits, 60);
+        if (free > 0) st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0) };
       } else if (jackpotId === 'golden_buyer') {
         const ev: ActiveMarketEvent = {
           id: `golden-${t}`, kind: 'golden_buyer', stationId: st.currentStation, goodId: null,
@@ -613,31 +695,50 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
   return st;
 }
 
-export function completeJump(targetStationId: string): { roll: RolledArrival } {
+export function completeJump(
+  targetNodeId: string,
+  opts: { finalStop?: boolean; laneTrait?: MapLane['trait'] } = {}
+): { roll: RolledArrival } {
   const t = now();
+  const finalStop = opts.finalStop !== false; // default true — single hops behave like before
   let rolled: RolledArrival = { kind: 'clean' };
   setState((s) => {
-    let state: GameState = { ...s, currentStation: targetStationId, stats: { ...s.stats, totalJumps: s.stats.totalJumps + 1 } };
-    state = stampCodex(state, 'stations', targetStationId);
-    // Arriving forces an immediate local pulse (spec §5.2)
-    state = processMarketPulses({ ...state, lastMarketPulseAt: state.lastMarketPulseAt - PULSE_INTERVAL_MS }, t);
+    const map = generateSectorMap(s.sector, s.runSeed ?? 0);
+    const node = nodeById(map, targetNodeId);
+    const isStation = node?.kind === 'station';
+    let state: GameState = { ...s, currentStation: targetNodeId, stats: { ...s.stats, totalJumps: s.stats.totalJumps + 1 } };
+    if (isStation) state = stampCodex(state, 'stations', targetNodeId);
+    // Real-time pulses (tick/bootGame) do stock regen; this arrival-forced pulse
+    // only fast-forwards waves so hopping doesn't heal perturbed stocks for free.
+    state = processMarketPulses({ ...state, lastMarketPulseAt: state.lastMarketPulseAt - PULSE_INTERVAL_MS }, t, { skipStockRegen: true });
 
-    const carryingContraband = Object.keys(state.cargo).some((gid) => state.cargo[gid].qty > 0 && GOODS_BY_ID[gid]?.contraband);
-    const scanChance = scanChanceFor(state, targetStationId);
-    const forced = carryingContraband && chance(sessionRng, scanChance);
+    const pirateAmbush = opts.laneTrait === 'pirate' && chance(sessionRng, 0.3);
+    if (pirateAmbush) {
+      rolled = { kind: 'encounter', detail: { encounterId: 'pirate_toll' } };
+      state = { ...state, pendingEncounter: { encounterId: 'pirate_toll', rolledAt: t } };
+    } else if (finalStop && isStation) {
+      const carryingContraband = Object.keys(state.cargo).some((gid) => state.cargo[gid].qty > 0 && GOODS_BY_ID[gid]?.contraband);
+      const scanChance = scanChanceFor(state, targetNodeId);
+      const forced = carryingContraband && chance(sessionRng, scanChance);
+      rolled = forced ? { kind: 'encounter', detail: { encounterId: 'customs_scan' } } : rollArrival(state);
+      if (forced) state = { ...state, pendingEncounter: { encounterId: 'customs_scan', rolledAt: t } };
+      else state = applyArrivalRoll(state, rolled, t);
+    }
 
-    rolled = forced ? { kind: 'encounter', detail: { encounterId: 'customs_scan' } } : rollArrival(state);
-    if (forced) state = { ...state, pendingEncounter: { encounterId: 'customs_scan', rolledAt: t } };
-    else state = applyArrivalRoll(state, rolled, t);
+    if (node?.kind === 'beacon' && !state.visitedBeacons.includes(targetNodeId)) {
+      state = { ...state, visitedBeacons: [...state.visitedBeacons, targetNodeId], xp: state.xp + 25 };
+      emit({ type: 'toast', text: 'Beacon logged. +25 XP', icon: '📍' });
+      state = applyXpAndRankUps(state);
+    }
 
     state = progressQuests(state, (q) => {
-      if (q.kind === 'visit_station' && q.stationId === targetStationId) return { ...q, progress: q.goal };
+      if (q.kind === 'visit_station' && q.stationId === targetNodeId) return { ...q, progress: q.goal };
       if (q.kind === 'jump_n') return { ...q, progress: Math.min(q.goal, q.progress + 1) };
       return q;
     });
     return state;
   });
-  emit({ type: 'sfx', id: 'arrival', stationMotif: STATIONS_BY_ID[targetStationId]?.theme.motif });
+  emit({ type: 'sfx', id: 'arrival', stationMotif: STATIONS_BY_ID[targetNodeId]?.theme.motif ?? WAYPOINT_THEME.motif });
   return { roll: rolled };
 }
 
@@ -700,10 +801,10 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           if (success) {
             const minQ = Number(choice.params?.gainMinQty ?? 2);
             const maxQ = Number(choice.params?.gainMaxQty ?? 6);
-            const qty = Math.min(randInt(sessionRng, minQ, maxQ), maxHold(st) - usedHold(st));
             const bestTier = bestUnlockedTier(st.rank);
             const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 3);
             const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
+            const qty = Math.min(randInt(sessionRng, minQ, maxQ), freeCapacityUnits(st, good.id));
             st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
             resultText = qty > 0 ? `Salvaged ${qty}× ${good.name}. Free loot.` : 'Hold was full — grabbed nothing.';
             outcome = 'good';
@@ -730,7 +831,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           const price = getPrice(st, st.currentStation, good.id);
           const pct = randRange(sessionRng, minPct, maxPct);
           const dealPrice = price * pct;
-          const qty = Math.min(randInt(sessionRng, 3, 10), maxHold(st) - usedHold(st));
+          const qty = Math.min(randInt(sessionRng, 3, 10), freeCapacityUnits(st, good.id));
           const cost = dealPrice * qty;
           const isGoodDeal = chance(sessionRng, goodOdds) || rolodex;
           if (qty > 0 && st.credits >= cost && isGoodDeal) {
@@ -780,7 +881,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
             } else if (roll < 0.75) {
               const unlocked = allUnlockedGoods(st);
               const good = unlocked.length ? pick(sessionRng, unlocked) : GOODS[0];
-              const qty = Math.min(randInt(sessionRng, 2, 5), maxHold(st) - usedHold(st));
+              const qty = Math.min(randInt(sessionRng, 2, 5), freeCapacityUnits(st, good.id));
               st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
               resultText = `They gave you ${qty}× ${good.name} in thanks.`;
               outcome = 'good';
@@ -1147,6 +1248,8 @@ export function payGateToll(): { ok: boolean; reason?: string } {
   const state = getState();
   const dest = state.sector + 1;
   if (!canEnterNextSector(state)) return { ok: false, reason: `Unlocks at Rank ${sectorUnlockRank(dest)}.` };
+  const map = generateSectorMap(state.sector, state.runSeed ?? 0);
+  if (nodeById(map, state.currentStation)?.kind !== 'gate') return { ok: false, reason: 'Dock at the Sector Gate first.' };
   const toll = nextSectorToll(state);
   if (state.credits < toll) return { ok: false, reason: 'Not enough credits.' };
   setState((s) => {
@@ -1157,6 +1260,7 @@ export function payGateToll(): { ok: boolean; reason?: string } {
       ...s,
       credits: s.credits - toll,
       sector: dest,
+      currentStation: 'rust_harbor',
       maxSectorReached: Math.max(s.maxSectorReached, dest),
       waves,
       bests: { ...s.bests, deepestSector: Math.max(s.bests.deepestSector, dest) },
@@ -1165,6 +1269,47 @@ export function payGateToll(): { ok: boolean; reason?: string } {
   emit({ type: 'sfx', id: 'toll' });
   emit({ type: 'confetti', power: 'big' });
   emit({ type: 'toast', text: `SECTOR ${dest} — everything's about to get expensive.`, icon: '🌌' });
+  return { ok: true };
+}
+
+/** Refund lane fuel for a hop cancelled before arrival (Map unmounted mid-travel). */
+export function refundFuel(pips: number): void {
+  if (pips <= 0) return;
+  setState((s) => ({ ...s, fuel: Math.min(maxFuel(s), s.fuel + pips) }));
+}
+
+export function buyFuelPip(): { ok: boolean; reason?: string } {
+  const state = getState();
+  const map = generateSectorMap(state.sector, state.runSeed ?? 0);
+  if (nodeById(map, state.currentStation)?.kind !== 'depot') return { ok: false, reason: 'No depot here.' };
+  if (state.fuel >= maxFuel(state)) return { ok: false, reason: 'Tank full.' };
+  const cost = Math.max(50, netWorth(state) * 0.02);
+  if (state.credits < cost) return { ok: false, reason: 'Not enough credits.' };
+  setState((s) => ({ ...s, credits: s.credits - cost, fuel: Math.min(maxFuel(s), s.fuel + 1) }));
+  emit({ type: 'sfx', id: 'refuel' });
+  emit({ type: 'floater', text: formatSignedCredits(-cost), kind: 'info' });
+  return { ok: true };
+}
+
+export function claimSalvage(): { ok: boolean; reason?: string } {
+  const state = getState();
+  const map = generateSectorMap(state.sector, state.runSeed ?? 0);
+  if (nodeById(map, state.currentStation)?.kind !== 'salvage') return { ok: false, reason: 'Nothing to salvage here.' };
+  const t = now();
+  const last = state.lastSalvageAt[state.currentStation] ?? 0;
+  if (t - last < 10 * 60_000) return { ok: false, reason: 'Field picked clean — come back later.' };
+  const unlocked = allUnlockedGoods(state);
+  if (!unlocked.length) return { ok: false, reason: 'Nothing here.' };
+  const good = pick(sessionRng, unlocked);
+  const qty = Math.min(randInt(sessionRng, 1, 4), freeCapacityUnits(state, good.id));
+  if (qty <= 0) return { ok: false, reason: 'Hold is full.' };
+  setState((s) => ({
+    ...s,
+    cargo: addCargo(s.cargo, good.id, qty, 0),
+    lastSalvageAt: { ...s.lastSalvageAt, [s.currentStation]: t },
+  }));
+  emit({ type: 'sfx', id: 'salvage' });
+  emit({ type: 'toast', text: `Hauled in ${qty}× ${good.name}.`, icon: good.icon });
   return { ok: true };
 }
 

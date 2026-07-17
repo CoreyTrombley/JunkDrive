@@ -9,6 +9,7 @@ export interface Good {
   tier: number;
   unlockRank: number;
   base: number;
+  mass: number; // tons per unit — tonnage hold currency (spec 2026-07-16)
   volatility: Volatility;
   contraband?: boolean;
   flavor?: string;
@@ -127,7 +128,8 @@ export type QuestKind =
   | 'claim_offline'
   | 'lucky_flip'
   | 'codex_set'
-  | 'jump_n';
+  | 'jump_n'
+  | 'deliver_manifest';
 
 export type QuestSize = 'tiny' | 'medium' | 'session';
 

@@ -2,7 +2,7 @@ import { store } from '../engine/store';
 import { SHIP_UPGRADES, upgradeCost } from '../config/ship';
 import { buyShipUpgrade } from '../engine/actions';
 import { formatCredits, formatNum, formatDuration } from '../engine/num';
-import { maxHold, maxFuel } from '../engine/derived';
+import { maxHold, usedHold, maxFuel } from '../engine/derived';
 
 export function ShipScreen() {
   const s = store.value;
@@ -14,7 +14,7 @@ export function ShipScreen() {
         <span class="icon">🚀</span>
         <div>
           <h1>Dry Dock</h1>
-          <div class="sub">Cargo {maxHold(s)} · Fuel {maxFuel(s)} max</div>
+          <div class="sub">Cargo {usedHold(s).toFixed(1)}t / {maxHold(s).toFixed(0)}t · Fuel {maxFuel(s)} max</div>
         </div>
       </div>
 

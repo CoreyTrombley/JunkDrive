@@ -1,5 +1,6 @@
 import type { Good, Volatility } from '../config/types';
 import { mulberry32, hashSeed, pick, randRange, chance } from './rng';
+import { STATIONS_BY_ID } from '../config/stations';
 
 // Procedural sector content — spec §16.4. Sector 1 is the hand-authored
 // catalog (config/goods.ts, config/stations.ts). Sector N>=2 keeps the same
@@ -34,6 +35,11 @@ export function generateSectorGoods(sector: number, runSeed: number): Good[] {
     const name = `${material} ${form}`;
     const tier = band + 1 + (sector - 1) * 0; // goods scale via sectorScale(), tier just drives unlock rank pacing
     const unlockRank = sectorUnlockRankForGood(sector, band);
+    const bandMass = [6, 3.75, 1.5, 0.6][band];
+    // Mass rolls from a per-good side rng — NEVER the main `rng` stream, which
+    // must keep emitting the exact legacy sequence for runSeed 0 saves.
+    const massRng = mulberry32((hashSeed(`s${sector}_g${band}-mass`) ^ (runSeed >>> 0)) >>> 0);
+    const mass = Math.round(bandMass * randRange(massRng, 0.7, 1.3) * 100) / 100;
     const anchor = [50, 400, 3000, 40000][band];
     const base = Math.round(anchor * randRange(rng, 0.7, 1.4));
     goods.push({
@@ -43,6 +49,7 @@ export function generateSectorGoods(sector: number, runSeed: number): Good[] {
       tier: tier + 2, // keep above sector-1 tiers for sorting/display purposes
       unlockRank,
       base,
+      mass,
       volatility: volatilities[band],
       contraband: chance(rng, 0.15),
     });
@@ -68,6 +75,13 @@ export function dressStationForSector(baseStationId: string, sector: number, run
   const suffix = pick(rng, STATION_SUFFIX);
   const hueShift = Math.round(randRange(rng, 20, 340));
   return { name: `${prefix} ${suffix}`, hueShift };
+}
+
+/** Canonical user-facing station name: hand-authored in sector 1, per-sector
+ *  dressing beyond — every UI surface must use this, not `station.name`. */
+export function stationDisplayName(stationId: string, sector: number, runSeed: number): string {
+  const dressed = dressStationForSector(stationId, sector, runSeed);
+  return dressed.name || STATIONS_BY_ID[stationId]?.name || stationId;
 }
 
 /** Re-rolled bias for sector-N goods across the 7 stations — new best routes every sector. */

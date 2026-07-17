@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { store } from '../engine/store';
 import { getPrice } from '../engine/pricing';
-import { maxHold, usedHold } from '../engine/derived';
+import { maxHold, usedHold, freeCapacityUnits } from '../engine/derived';
 import { formatCredits, formatSignedCredits, formatNum } from '../engine/num';
 import { buyGood, sellGood } from '../engine/actions';
 import type { Good } from '../config/types';
@@ -17,8 +17,9 @@ export function TradeSheet({ good, mode, onClose }: Props) {
   const price = getPrice(s, s.currentStation, good.id);
   const entry = s.cargo[good.id];
   const owned = entry?.qty ?? 0;
-  const free = maxHold(s) - usedHold(s);
-  const maxQty = mode === 'buy' ? Math.max(0, Math.min(free, Math.floor(s.credits / Math.max(0.01, price)))) : owned;
+  const maxQty = mode === 'buy'
+    ? Math.max(0, Math.min(freeCapacityUnits(s, good.id), Math.floor(s.credits / Math.max(0.01, price))))
+    : owned;
 
   const [qty, setQty] = useState(Math.min(Math.max(1, maxQty), Math.max(1, maxQty)));
   const clampedQty = Math.max(0, Math.min(qty, Math.max(maxQty, 0)));
@@ -41,7 +42,7 @@ export function TradeSheet({ good, mode, onClose }: Props) {
           <span>{mode === 'buy' ? 'Buy' : 'Sell'} {good.name}</span>
         </div>
         <div class="sheet-sub mono">
-          {formatCredits(price)} / unit {good.contraband ? '· ⚠️ CONTRABAND' : ''}
+          {formatCredits(price)} / unit{` · ${good.mass}t/unit`} {good.contraband ? '· ⚠️ CONTRABAND' : ''}
           {mode === 'sell' && entry ? ` · avg cost ${formatCredits(entry.avgCost)}` : ''}
         </div>
 
@@ -87,7 +88,7 @@ export function TradeSheet({ good, mode, onClose }: Props) {
         {mode === 'buy' && (
           <div class="pl-line">
             <span>Cargo hold</span>
-            <span class="val mono">{usedHold(s) + clampedQty} / {maxHold(s)}</span>
+            <span class="val mono">{(usedHold(s) + clampedQty * good.mass).toFixed(1)}t / {maxHold(s).toFixed(0)}t</span>
           </div>
         )}
 

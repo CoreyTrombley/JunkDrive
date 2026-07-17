@@ -19,6 +19,7 @@ import { Onboarding } from './components/Onboarding';
 import { onUiEvent } from './engine/bus';
 import { dressStationForSector } from './engine/sectorgen';
 import { setStationAmbience } from './engine/audio';
+import { generateSectorMap, nodeById, WAYPOINT_THEME } from './engine/mapgen';
 
 export function App() {
   const s = store.value;
@@ -52,11 +53,13 @@ export function App() {
     if (s.pendingOfflineReport) setActiveOfflineReport(s.pendingOfflineReport);
   }, [s.pendingOfflineReport]);
 
-  const station = STATIONS_BY_ID[s.currentStation];
-  const dressing = dressStationForSector(s.currentStation, s.sector, s.runSeed ?? 0);
+  const map = generateSectorMap(s.sector, s.runSeed ?? 0);
+  const node = nodeById(map, s.currentStation);
+  const station = node?.kind === 'station' ? STATIONS_BY_ID[s.currentStation] : undefined;
+  const theme = station?.theme ?? WAYPOINT_THEME;
+  const dressing = station ? dressStationForSector(s.currentStation, s.sector, s.runSeed ?? 0) : { name: node?.name ?? '', hueShift: 0 };
 
   useEffect(() => {
-    const theme = station.theme;
     const shell = document.getElementById('app-shell-el');
     if (shell) {
       shell.style.setProperty('--bg', theme.bg);
@@ -86,8 +89,8 @@ export function App() {
   return (
     <div id="app-shell-el" class={`app-shell${shake ? ' shake' : ''}${s.settings.reducedMotion ? ' reduced-motion' : ''}`}>
       <Starfield
-        hue={station.theme.particleHue}
-        overlay={station.theme.overlay}
+        hue={theme.particleHue}
+        overlay={theme.overlay}
         hyperspace={hyperspace}
         reducedMotion={s.settings.reducedMotion}
       />

@@ -6,10 +6,12 @@ import { initWave, fastForwardWave } from './price';
 import { mulberry32, hashSeed } from './rng';
 import type { QuestKind, QuestSize } from '../config/types';
 import { SCHEMA_VERSION } from './save';
+import type { MarketSort, MarketFilters } from './marketview';
+import type { Manifest } from './manifests';
 
-export const BASE_HOLD = 10;
-export const BASE_MAX_FUEL = 5;
-export const BASE_FUEL_REGEN_SEC = 75;
+export const BASE_HOLD_TONS = 20;
+export const BASE_MAX_FUEL = 8;
+export const BASE_FUEL_REGEN_SEC = 65;
 export const STARTING_CREDITS = 500;
 export const STARTING_STATION = 'rust_harbor';
 
@@ -75,6 +77,8 @@ export interface Settings {
   musicVolume: number;
   haptics: boolean;
   muted: boolean;
+  marketSort: MarketSort;
+  marketFilters: MarketFilters;
 }
 
 export interface PendingEncounter {
@@ -136,6 +140,15 @@ export interface GameState {
   pendingJackpot: JackpotCelebration | null;
 
   extraSectorGoods: Record<number, string[]>; // sector -> good ids generated for it
+
+  /** Sparse per-station stock levels; missing entry = baseline (see engine/stocks.ts). */
+  stocks: Record<string, Record<string, number>>;
+
+  manifests: Manifest[];
+  manifestSeq: number;
+
+  lastSalvageAt: Record<string, number>;
+  visitedBeacons: string[];
 
   settings: Settings;
   onboarding: { step: number; complete: boolean; skipped: boolean };
@@ -217,6 +230,14 @@ export function createInitialState(): GameState {
 
     extraSectorGoods: {},
 
+    stocks: {},
+
+    manifests: [],
+    manifestSeq: 1,
+
+    lastSalvageAt: {},
+    visitedBeacons: [],
+
     settings: {
       chillMode: false,
       reducedMotion: false,
@@ -225,6 +246,8 @@ export function createInitialState(): GameState {
       musicVolume: 0.2,
       haptics: true,
       muted: false,
+      marketSort: 'default',
+      marketFilters: { owned: false, affordable: false, hideContraband: false, tier: null },
     },
     onboarding: { step: 0, complete: false, skipped: false },
     stats: {
