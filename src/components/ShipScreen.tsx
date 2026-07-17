@@ -25,7 +25,7 @@ export function ShipScreen() {
         ))}
       </div>
 
-      <div class="section-label">Upgrades</div>
+      <div class="card"><div class="card-header"><span class="ch-icon">🛠️</span>UPGRADES</div>
       {SHIP_UPGRADES.map((u) => {
         const level = s.shipUpgrades[u.id] || 0;
         const maxed = u.maxLevel != null && level >= u.maxLevel;
@@ -44,8 +44,9 @@ export function ShipScreen() {
           </div>
         );
       })}
+      </div>
 
-      <div class="section-label">Personal Bests</div>
+      <div class="card"><div class="card-header"><span class="ch-icon">🏆</span>PERSONAL BESTS</div>
       <div class="bests-grid">
         <div class="best-tile">
           <div class="bt-label">Best Margin</div>
@@ -63,6 +64,7 @@ export function ShipScreen() {
           <div class="bt-label">Fastest ₡1M</div>
           <div class="bt-val mono">{s.bests.fastestMillionMs ? formatDuration(s.bests.fastestMillionMs) : '—'}</div>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -46,47 +46,45 @@ export function MarketScreen() {
   return (
     <>
     <div class="screen">
-      <div class="screen-header">
-        <span class="icon">{station.icon}</span>
-        <div>
-          <h1>{stationDisplayName(s.currentStation, s.sector, s.runSeed ?? 0)}</h1>
-          <div class="sub">{station.blurb}</div>
+      <div class="sticky-head">
+        <div class="sh-station">
+          <span class="icon">{station.icon}</span>
+          <b>{stationDisplayName(s.currentStation, s.sector, s.runSeed ?? 0)}</b>
+        </div>
+        <div class="market-controls">
+          <select
+            class="mc-sort"
+            value={s.settings.marketSort}
+            onChange={(e) => updateSettings({ marketSort: (e.target as HTMLSelectElement).value as MarketSort })}
+          >
+            {(Object.keys(SORT_LABELS) as MarketSort[]).map((k) => (
+              <option key={k} value={k}>↓ {SORT_LABELS[k]}</option>
+            ))}
+          </select>
+          {([['owned', 'Owned'], ['affordable', 'Can buy'], ['hideContraband', 'No ⚠']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              class={`mc-chip${s.settings.marketFilters[key] ? ' on' : ''}`}
+              aria-pressed={s.settings.marketFilters[key]}
+              onClick={() => updateSettings({ marketFilters: { ...s.settings.marketFilters, [key]: !s.settings.marketFilters[key] } })}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            class={`mc-chip${s.settings.marketFilters.tier !== null ? ' on' : ''}`}
+            aria-pressed={s.settings.marketFilters.tier !== null}
+            onClick={() => {
+              const cur = s.settings.marketFilters.tier;
+              const next = cur === null ? 1 : cur >= 6 ? null : cur + 1;
+              updateSettings({ marketFilters: { ...s.settings.marketFilters, tier: next } });
+            }}
+          >
+            {s.settings.marketFilters.tier === null ? 'Tier: all' : `Tier ${s.settings.marketFilters.tier}`}
+          </button>
         </div>
       </div>
-
-      <div class="section-label">Goods</div>
-      <div class="market-controls">
-        <select
-          class="mc-sort"
-          value={s.settings.marketSort}
-          onChange={(e) => updateSettings({ marketSort: (e.target as HTMLSelectElement).value as MarketSort })}
-        >
-          {(Object.keys(SORT_LABELS) as MarketSort[]).map((k) => (
-            <option key={k} value={k}>↓ {SORT_LABELS[k]}</option>
-          ))}
-        </select>
-        {([['owned', 'Owned'], ['affordable', 'Can buy'], ['hideContraband', 'No ⚠']] as const).map(([key, label]) => (
-          <button
-            key={key}
-            class={`mc-chip${s.settings.marketFilters[key] ? ' on' : ''}`}
-            aria-pressed={s.settings.marketFilters[key]}
-            onClick={() => updateSettings({ marketFilters: { ...s.settings.marketFilters, [key]: !s.settings.marketFilters[key] } })}
-          >
-            {label}
-          </button>
-        ))}
-        <button
-          class={`mc-chip${s.settings.marketFilters.tier !== null ? ' on' : ''}`}
-          aria-pressed={s.settings.marketFilters.tier !== null}
-          onClick={() => {
-            const cur = s.settings.marketFilters.tier;
-            const next = cur === null ? 1 : cur >= 6 ? null : cur + 1;
-            updateSettings({ marketFilters: { ...s.settings.marketFilters, tier: next } });
-          }}
-        >
-          {s.settings.marketFilters.tier === null ? 'Tier: all' : `Tier ${s.settings.marketFilters.tier}`}
-        </button>
-      </div>
+      <div class="empty-hint" style={{ padding: '6px 4px 10px', textAlign: 'left' }}>{station.blurb}</div>
       {goods.map((g) => {
         const locked = g.unlockRank > s.rank;
         const price = locked ? 0 : getPrice(s, s.currentStation, g.id);
