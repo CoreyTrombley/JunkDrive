@@ -45,7 +45,7 @@ export function WaypointPanel({ node }: { node: MapNode }) {
             <div class="g-main">
               <div class="g-name">{g.name}</div>
               <div class="g-price-line"><span class="g-price mono">{formatCredits(price)}</span></div>
-              <div class="g-owned">{owned > 0 ? `Owned: ${formatNum(owned)} · ` : ''}{g.mass}t</div>
+              <div class="g-owned">{owned > 0 ? `Owned: ${formatNum(owned)} · ` : ''}{g.mass}m³</div>
             </div>
             <div class="g-actions">
               <button class="btn btn-buy" onClick={() => setSheet({ good: g, mode: 'buy' })}>BUY</button>

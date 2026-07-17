@@ -42,7 +42,7 @@ export function TradeSheet({ good, mode, onClose }: Props) {
           <span>{mode === 'buy' ? 'Buy' : 'Sell'} {good.name}</span>
         </div>
         <div class="sheet-sub mono">
-          {formatCredits(price)} / unit{` · ${good.mass}t/unit`} {good.contraband ? '· ⚠️ CONTRABAND' : ''}
+          {formatCredits(price)} / unit{` · ${good.mass}m³/unit`} {good.contraband ? '· ⚠️ CONTRABAND' : ''}
           {mode === 'sell' && entry ? ` · avg cost ${formatCredits(entry.avgCost)}` : ''}
         </div>
 
@@ -88,7 +88,7 @@ export function TradeSheet({ good, mode, onClose }: Props) {
         {mode === 'buy' && (
           <div class="pl-line">
             <span>Cargo hold</span>
-            <span class="val mono">{(usedHold(s) + clampedQty * good.mass).toFixed(1)}t / {maxHold(s).toFixed(0)}t</span>
+            <span class="val mono">{(usedHold(s) + clampedQty * good.mass).toFixed(1)}m³ / {maxHold(s).toFixed(0)}m³</span>
           </div>
         )}
 
