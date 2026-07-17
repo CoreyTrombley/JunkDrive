@@ -7,6 +7,7 @@ import { STATIONS_BY_ID } from '../config/stations';
 import { goodById } from '../engine/pricing';
 import { canClaimDailyStreak } from '../engine/actions';
 import { stationDisplayName } from '../engine/sectorgen';
+import { resonanceNeeded, SECTOR_CAP } from '../engine/formulas';
 
 export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
   const s = store.value;
@@ -28,6 +29,10 @@ export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
   const readyManifest = s.manifests?.find((m) => m.expiresAt > t && s.currentStation === m.stationId && m.items.every((it) => (s.cargo[it.goodId]?.qty ?? 0) >= it.qty));
   if (readyManifest) tickerItems.push('📦 Contract ready to deliver HERE — MAP tab');
   if (canClaimDailyStreak(s)) tickerItems.push('🎁 Daily crate ready — MORE tab');
+  if (s.sector < SECTOR_CAP) {
+    const gateNeed = resonanceNeeded(s.sector + 1);
+    if (gateNeed > 0 && s.gateResonance >= gateNeed) tickerItems.push(`⚡ Gate charged — Sector ${s.sector + 1} awaits`);
+  }
   for (const ev of s.activeEvents.filter((e) => e.expiresAt > t).slice(0, 3)) {
     const station = STATIONS_BY_ID[ev.stationId];
     const good = ev.goodId ? goodById(ev.goodId) : null;
