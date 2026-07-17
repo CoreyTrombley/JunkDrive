@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { store, clockTick, getState } from '../engine/store';
 import { STATIONS, STATIONS_BY_ID } from '../config/stations';
-import { MARKET_EVENTS_BY_ID } from '../config/events';
 import { travelDurationMs, canSkipTravel } from '../engine/derived';
 import { startJump, completeJump, refundFuel } from '../engine/actions';
 import { bestRoute, goodById } from '../engine/pricing';
 import { generateSectorMap, nodeById, type MapNode } from '../engine/mapgen';
 import { routeThrough } from '../engine/routing';
-import { formatCredits, formatDuration, formatPct } from '../engine/num';
+import { formatPct } from '../engine/num';
 import { dressStationForSector, stationDisplayName } from '../engine/sectorgen';
-import { ContractsPanel } from './ContractsPanel';
 import { now } from '../engine/time';
 import { emit } from '../engine/bus';
 import type { MapSubId } from './nav';
 import { SubHeader } from './SubHeader';
+import { ContractsScreen } from './ContractsScreen';
+import { SignalsScreen } from './SignalsScreen';
 
 export function MapScreen({ sub, openSub, closeSub, onHyperspace, onArrive }: { sub: MapSubId | null; openSub: (id: MapSubId) => void; closeSub: () => void; onHyperspace: (active: boolean) => void; onArrive: () => void }) {
   const s = store.value;
@@ -40,12 +40,15 @@ export function MapScreen({ sub, openSub, closeSub, onHyperspace, onArrive }: { 
   if (sub) {
     return (
       <div class="screen anim-slide" key={sub}>
-        <SubHeader icon="🗺️" title={sub.toUpperCase()} onBack={closeSub} />
-        <div class="empty-hint">Coming online…</div>
+        <SubHeader
+          icon={sub === 'contracts' ? '⚡' : '📈'}
+          title={sub === 'contracts' ? 'Contracts' : 'Signals'}
+          onBack={closeSub}
+        />
+        {sub === 'contracts' ? <ContractsScreen /> : <SignalsScreen />}
       </div>
     );
   }
-  void openSub; // consumed in U3
 
   const t = now();
 
@@ -124,7 +127,7 @@ export function MapScreen({ sub, openSub, closeSub, onHyperspace, onArrive }: { 
 
   return (
     <>
-    <div class="screen">
+    <div class="screen anim-fade">
       <div class="screen-header">
         <span class="icon">🗺️</span>
         <div>
@@ -185,37 +188,20 @@ export function MapScreen({ sub, openSub, closeSub, onHyperspace, onArrive }: { 
         )}
       </div>
 
-      <ContractsPanel />
-
-      <div class="section-label">Active Signals</div>
-      {liveEvents.length === 0 && <div class="empty-hint">Nothing spiking right now. Fly and find out.</div>}
-      {liveEvents.map((e) => {
-        const st = STATIONS_BY_ID[e.stationId];
-        const def = MARKET_EVENTS_BY_ID[e.kind];
-        const good = e.goodId ? goodById(e.goodId) : null;
-        const dressing = st ? dressStationForSector(st.id, s.sector, s.runSeed ?? 0) : null;
-        const stationName = dressing?.name || st?.name || '?';
-        const desc = def
-          ? def.copyTemplate.replace('{station}', stationName).replace('{good}', good?.name ?? 'everything').replace('{mult}', e.multiplier.toFixed(1))
-          : '';
-        const direction = e.disables ? 'blocked' : e.multiplier >= 1 ? 'up' : 'down';
+      {(() => {
+        const liveManifests = s.manifests.filter((m) => m.expiresAt > t);
+        const readyHere = liveManifests.some((m) => s.currentStation === m.stationId && m.items.every((it) => (s.cargo[it.goodId]?.qty ?? 0) >= it.qty));
         return (
-          <div key={e.id} class={`signal-row ${direction}`}>
-            <div class="signal-icon">{def?.icon ?? '📡'}</div>
-            <div class="signal-body">
-              <div class="signal-title">
-                {def?.name ?? 'MARKET SIGNAL'}
-                <span class="signal-loc"> · {st?.icon} {stationName}{st?.id === s.currentStation ? ' (here)' : ''}</span>
-              </div>
-              <div class="signal-desc">{desc}</div>
-            </div>
-            <div class="signal-meta">
-              <span class={`signal-badge ${direction}`}>{e.disables ? '🚫 BLOCKED' : `${e.multiplier >= 1 ? '▲' : '▼'} ×${e.multiplier.toFixed(1)}`}</span>
-              <span class="signal-timer mono">⏱ {formatDuration(e.expiresAt - t)}</span>
-            </div>
+          <div class="pill-row">
+            <button class={`pill-btn${readyHere ? ' alert' : ''}`} onClick={() => openSub('contracts')}>
+              ⚡ Contracts <span class="pill-count">({liveManifests.length}{readyHere ? ' · ready!' : ''})</span>
+            </button>
+            <button class="pill-btn" onClick={() => openSub('signals')}>
+              📈 Signals <span class="pill-count">({liveEvents.length})</span>
+            </button>
           </div>
         );
-      })}
+      })()}
     </div>
 
     {traveling && (
