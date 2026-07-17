@@ -9,7 +9,7 @@ export interface Good {
   tier: number;
   unlockRank: number;
   base: number;
-  mass: number; // tons per unit — tonnage hold currency (spec 2026-07-16)
+  mass: number; // m³ per unit — volume-based hold, EVE-style (×10 scale vs the old tons)
   volatility: Volatility;
   contraband?: boolean;
   flavor?: string;

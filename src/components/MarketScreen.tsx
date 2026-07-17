@@ -116,7 +116,7 @@ export function MarketScreen() {
                     {stockState && <span class={`g-stock ${stockState}`}>{stockState === 'scarce' ? 'SCARCE' : 'GLUT'}</span>}
                   </div>
                   {wave && <Sparkline history={wave.history} volatility={g.volatility} />}
-                  <div class="g-owned">{owned > 0 ? `Owned: ${formatNum(owned)} · ` : disabled ? 'Embargoed here · ' : ''}{g.mass}t</div>
+                  <div class="g-owned">{owned > 0 ? `Owned: ${formatNum(owned)} · ` : disabled ? 'Embargoed here · ' : ''}{g.mass}m³</div>
                 </>
               )}
             </div>

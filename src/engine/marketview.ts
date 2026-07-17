@@ -16,7 +16,7 @@ export interface MarketFilters {
 export const DEFAULT_FILTERS: MarketFilters = { owned: false, affordable: false, hideContraband: false, tier: null };
 
 export const SORT_LABELS: Record<MarketSort, string> = {
-  default: 'Tier', price: 'Price', vsAvg: 'vs Avg', owned: 'Owned', profit: 'Profit', perTon: '₡/ton',
+  default: 'Tier', price: 'Price', vsAvg: 'vs Avg', owned: 'Owned', profit: 'Profit', perTon: '₡/m³',
 };
 
 export function applyMarketView(goods: Good[], state: GameState, sort: MarketSort, filters: MarketFilters): Good[] {

@@ -42,7 +42,7 @@ export function TradeSheet({ good, mode, onClose }: Props) {
           <span>{mode === 'buy' ? 'Buy' : 'Sell'} {good.name}</span>
         </div>
         <div class="sheet-sub mono">
-          {formatCredits(price)} / unit{` · ${good.mass}t/unit`} {good.contraband ? '· ⚠️ CONTRABAND' : ''}
+          {formatCredits(price)} / unit{` · ${good.mass}m³/unit`} {good.contraband ? '· ⚠️ CONTRABAND' : ''}
           {mode === 'sell' && entry ? ` · avg cost ${formatCredits(entry.avgCost)}` : ''}
         </div>
 
@@ -52,11 +52,12 @@ export function TradeSheet({ good, mode, onClose }: Props) {
             type="range"
             min={0}
             max={Math.max(maxQty, 0)}
+            step={Math.max(1, Math.floor(Math.max(maxQty, 0) / 1000))}
             value={clampedQty}
             onInput={(e) => setQty(Number((e.target as HTMLInputElement).value))}
           />
           <button onClick={() => setQty((q) => Math.min(maxQty, q + 1))}>+</button>
-          <div class="qty-display mono">{clampedQty}</div>
+          <div class="qty-display mono">{formatNum(clampedQty)}</div>
         </div>
         <div class="pct-row">
           {[0.25, 0.5, 0.75, 1].map((pct) => {
@@ -88,7 +89,7 @@ export function TradeSheet({ good, mode, onClose }: Props) {
         {mode === 'buy' && (
           <div class="pl-line">
             <span>Cargo hold</span>
-            <span class="val mono">{(usedHold(s) + clampedQty * good.mass).toFixed(1)}t / {maxHold(s).toFixed(0)}t</span>
+            <span class="val mono">{formatNum(usedHold(s) + clampedQty * good.mass)}m³ / {formatNum(maxHold(s))}m³</span>
           </div>
         )}
 

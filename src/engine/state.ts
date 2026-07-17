@@ -9,7 +9,7 @@ import { SCHEMA_VERSION } from './save';
 import type { MarketSort, MarketFilters } from './marketview';
 import type { Manifest } from './manifests';
 
-export const BASE_HOLD_TONS = 20;
+export const BASE_HOLD_M3 = 200;
 export const BASE_MAX_FUEL = 8;
 export const BASE_FUEL_REGEN_SEC = 65;
 export const STARTING_CREDITS = 500;

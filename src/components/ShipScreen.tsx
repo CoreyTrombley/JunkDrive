@@ -14,7 +14,7 @@ export function ShipScreen() {
         <span class="icon">🚀</span>
         <div>
           <h1>Dry Dock</h1>
-          <div class="sub">Cargo {usedHold(s).toFixed(1)}t / {maxHold(s).toFixed(0)}t · Fuel {maxFuel(s)} max</div>
+          <div class="sub">Cargo {formatNum(usedHold(s))}m³ / {formatNum(maxHold(s))}m³ · Fuel {maxFuel(s)} max</div>
         </div>
       </div>
 

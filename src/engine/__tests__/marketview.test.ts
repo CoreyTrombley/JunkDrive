@@ -25,7 +25,7 @@ describe('market view', () => {
     expect(t4.map((g) => g.id).sort()).toEqual(['banned_ai_chips', 'warp_cells']);
   });
 
-  it('sorts by price descending and by value density (₡/ton)', () => {
+  it('sorts by price descending and by value density (₡/m³)', () => {
     const s = createInitialState();
     s.rank = 30;
     const goods = [GOODS_BY_ID['scrap_metal'], GOODS_BY_ID['time_crystals'], GOODS_BY_ID['coolant']];

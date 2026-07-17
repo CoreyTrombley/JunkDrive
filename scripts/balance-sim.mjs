@@ -29,18 +29,18 @@ function milestoneMultiplier(owned) {
 }
 const rigUnitCost = (rig, owned) => Math.round(rig.baseCost * Math.pow(rig.costGrowth, owned));
 const GOODS = [
-  { unlockRank: 1, base: 35, mass: 7.5 },   // hull plates
-  { unlockRank: 3, base: 150, mass: 2.25 }, // spore crates
-  { unlockRank: 6, base: 900, mass: 0.9 },  // earth relics
-  { unlockRank: 9, base: 6500, mass: 1.2 }, // warp cells
-  { unlockRank: 10, base: 9000, mass: 0.75 },
-  { unlockRank: 15, base: 45000, mass: 0.9 },
-  { unlockRank: 17, base: 90000, mass: 0.45 },
-  { unlockRank: 19, base: 140000, mass: 0.4 },
-  { unlockRank: 22, base: 500000, mass: 0.45 },
-  { unlockRank: 24, base: 900000, mass: 1.5 },
-  { unlockRank: 26, base: 1500000, mass: 4.5 },
-  { unlockRank: 28, base: 2500000, mass: 0.25 },
+  { unlockRank: 1, base: 35, mass: 75 },   // hull plates
+  { unlockRank: 3, base: 150, mass: 22.5 }, // spore crates
+  { unlockRank: 6, base: 900, mass: 9 },  // earth relics
+  { unlockRank: 9, base: 6500, mass: 12 }, // warp cells
+  { unlockRank: 10, base: 9000, mass: 7.5 },
+  { unlockRank: 15, base: 45000, mass: 9 },
+  { unlockRank: 17, base: 90000, mass: 4.5 },
+  { unlockRank: 19, base: 140000, mass: 4 },
+  { unlockRank: 22, base: 500000, mass: 4.5 },
+  { unlockRank: 24, base: 900000, mass: 15 },
+  { unlockRank: 26, base: 1500000, mass: 45 },
+  { unlockRank: 28, base: 2500000, mass: 2.5 },
 ];
 const bestGood = (rank) => { let b = GOODS[0]; for (const g of GOODS) if (g.unlockRank <= rank) b = g; return b; };
 const sectorScale = (s) => Math.pow(8, s - 1);
@@ -51,7 +51,7 @@ const xpToNext = (lvl) => Math.round(12 * Math.pow(lvl, 1.8));
 const P = {
   tapsPerSec: 2,
   exporterMid: 0.575, importerMid: 1.60,
-  holdBaseTons: 20, holdPerLevelTons: 5, cargoBaseCost: 800, cargoGrowth: 1.65,
+  holdBaseM3: 200, holdPerLevelM3: 50, cargoBaseCost: 800, cargoGrowth: 1.65,
   gravitonPct: 0.25, gravitonBaseCost: 250_000, gravitonGrowth: 5, gravitonMax: 5,
   fuelRegenBase: 65, fuelRegenPerLvl: 6, fuelRegenFloor: 35,
   recyclerBase: 5000, recyclerGrowth: 3, recyclerMax: 5,
@@ -106,7 +106,7 @@ function simTrader(hours, checkpoints) {
   const samples = new Map(); const rankHit = {};
   const HANDLING = 25;
   while (t < hours * 3600) {
-    const tons = (P.holdBaseTons + cargoLvl * P.holdPerLevelTons) * (1 + P.gravitonPct * gravitonLvl);
+    const tons = (P.holdBaseM3 + cargoLvl * P.holdPerLevelM3) * (1 + P.gravitonPct * gravitonLvl);
     const regen = Math.max(P.fuelRegenFloor, P.fuelRegenBase - recyclerLvl * P.fuelRegenPerLvl);
     const fuelPerLoop = 2 * P.lanesPerLeg * P.fuelPerLane; // two legs per loop
     const loopSec = fuelPerLoop * regen + 2 * P.lanesPerLeg * P.travelSecPerLane + HANDLING;

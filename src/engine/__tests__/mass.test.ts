@@ -8,15 +8,15 @@ describe('good masses', () => {
   });
 
   it('authored spot values match the spec', () => {
-    expect(GOODS_BY_ID['scrap_metal'].mass).toBe(6);
-    expect(GOODS_BY_ID['hull_plates'].mass).toBe(7.5);
-    expect(GOODS_BY_ID['earth_relics'].mass).toBe(0.9);
-    expect(GOODS_BY_ID['ghost_ships'].mass).toBe(4.5);
-    expect(GOODS_BY_ID['time_crystals'].mass).toBe(0.25);
+    expect(GOODS_BY_ID['scrap_metal'].mass).toBe(60);
+    expect(GOODS_BY_ID['hull_plates'].mass).toBe(75);
+    expect(GOODS_BY_ID['earth_relics'].mass).toBe(9);
+    expect(GOODS_BY_ID['ghost_ships'].mass).toBe(45);
+    expect(GOODS_BY_ID['time_crystals'].mass).toBe(2.5);
   });
 
   it('procedural goods roll band masses within range, deterministically', () => {
-    const bands = [6, 3.75, 1.5, 0.6];
+    const bands = [60, 37.5, 15, 6];
     const a = generateSectorGoods(2, 777);
     const b = generateSectorGoods(2, 777);
     expect(a.map((g) => g.mass)).toEqual(b.map((g) => g.mass));

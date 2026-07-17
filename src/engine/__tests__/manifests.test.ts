@@ -51,7 +51,7 @@ describe('trade manifests', () => {
     for (let seed = 1; seed <= 20; seed++) {
       const m = generateManifest(s, mulberry32(seed), seed, 0);
       const tons = m.items.reduce((t, it) => t + (goodById(it.goodId, s.runSeed ?? 0)?.mass ?? 1) * it.qty, 0);
-      const maxOverspill = m.items.length * 7.5; // qty floors, then Math.max(1,...) can add ≤1 heaviest unit per item
+      const maxOverspill = m.items.length * 75; // qty floors, then Math.max(1,...) can add ≤1 heaviest unit per item
       expect(tons).toBeLessThanOrEqual(maxHold(s) * 0.9 + maxOverspill);
       expect(tons).toBeGreaterThan(0);
     }
