@@ -12,8 +12,10 @@ import { dressStationForSector, stationDisplayName } from '../engine/sectorgen';
 import { ContractsPanel } from './ContractsPanel';
 import { now } from '../engine/time';
 import { emit } from '../engine/bus';
+import type { MapSubId } from './nav';
+import { SubHeader } from './SubHeader';
 
-export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: boolean) => void; onArrive: () => void }) {
+export function MapScreen({ sub, openSub, closeSub, onHyperspace, onArrive }: { sub: MapSubId | null; openSub: (id: MapSubId) => void; closeSub: () => void; onHyperspace: (active: boolean) => void; onArrive: () => void }) {
   const s = store.value;
   void clockTick.value;
   const map = generateSectorMap(s.sector, s.runSeed ?? 0);
@@ -34,6 +36,16 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
     hopDoneRef.current = null;
     onHyperspace(false);
   }, []);
+
+  if (sub) {
+    return (
+      <div class="screen anim-slide" key={sub}>
+        <SubHeader icon="🗺️" title={sub.toUpperCase()} onBack={closeSub} />
+        <div class="empty-hint">Coming online…</div>
+      </div>
+    );
+  }
+  void openSub; // consumed in U3
 
   const t = now();
 

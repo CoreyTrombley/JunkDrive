@@ -12,6 +12,8 @@ import {
 import { formatCredits, formatNum, formatDuration, formatPct } from '../engine/num';
 import { now } from '../engine/time';
 import { emit } from '../engine/bus';
+import type { MoreSubId } from './nav';
+import { SubHeader } from './SubHeader';
 
 function topEntry(record: Record<string, number>): { id: string; qty: number } | null {
   let best: { id: string; qty: number } | null = null;
@@ -84,12 +86,22 @@ function PrestigeButton() {
   );
 }
 
-export function MoreScreen() {
+export function MoreScreen({ sub, openSub, closeSub }: { sub: MoreSubId | null; openSub: (id: MoreSubId) => void; closeSub: () => void }) {
   const s = store.value;
   void clockTick.value;
   const [saveCode, setSaveCode] = useState('');
   const [importText, setImportText] = useState('');
   const [importMsg, setImportMsg] = useState('');
+
+  if (sub) {
+    return (
+      <div class="screen anim-slide" key={sub}>
+        <SubHeader icon="☰" title={sub.toUpperCase()} onBack={closeSub} />
+        <div class="empty-hint">Coming online…</div>
+      </div>
+    );
+  }
+  void openSub; // consumed in U2
 
   const dmPreview = prestigePreviewDM(s);
   const day = ((s.dailyStreak.count) % 7) + (canClaimDailyStreak(s) ? 1 : 0) || 1;

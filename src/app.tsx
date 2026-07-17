@@ -21,10 +21,17 @@ import { dressStationForSector } from './engine/sectorgen';
 import { setStationAmbience } from './engine/audio';
 import { generateSectorMap, nodeById, WAYPOINT_THEME } from './engine/mapgen';
 import { acknowledgeRimClamp } from './engine/actions';
+import type { SubScreen } from './components/nav';
 
 export function App() {
   const s = store.value;
-  const [tab, setTab] = useState<TabId>('market');
+  const [tab, setTabRaw] = useState<TabId>('market');
+  const [sub, setSub] = useState<SubScreen | null>(null);
+
+  function setTab(t: TabId) {
+    setSub(null); // switching tabs always returns to the tab's root screen
+    setTabRaw(t);
+  }
   const [shake, setShake] = useState(false);
   const [hyperspace, setHyperspace] = useState(false);
   const [activeEncounterId, setActiveEncounterId] = useState<string | null>(null);
@@ -87,10 +94,26 @@ export function App() {
   function renderScreen() {
     switch (tab) {
       case 'market': return <MarketScreen />;
-      case 'map': return <MapScreen onHyperspace={setHyperspace} onArrive={() => setTab('market')} />;
+      case 'map':
+        return (
+          <MapScreen
+            sub={sub?.tab === 'map' ? sub.id : null}
+            openSub={(id) => setSub({ tab: 'map', id })}
+            closeSub={() => setSub(null)}
+            onHyperspace={setHyperspace}
+            onArrive={() => setTab('market')}
+          />
+        );
       case 'ship': return <ShipScreen />;
       case 'yard': return <YardScreen />;
-      case 'more': return <MoreScreen />;
+      case 'more':
+        return (
+          <MoreScreen
+            sub={sub?.tab === 'more' ? sub.id : null}
+            openSub={(id) => setSub({ tab: 'more', id })}
+            closeSub={() => setSub(null)}
+          />
+        );
       default: return null;
     }
   }
@@ -104,7 +127,9 @@ export function App() {
         reducedMotion={s.settings.reducedMotion}
       />
       <Hud />
-      {renderScreen()}
+      <div class="screen-host" key={tab}>
+        {renderScreen()}
+      </div>
       <QuestRailStrip />
       <TabBar active={tab} onChange={setTab} />
       <FxLayer />
