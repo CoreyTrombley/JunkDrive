@@ -6,6 +6,7 @@ import { initWave, fastForwardWave } from './price';
 import { mulberry32, hashSeed } from './rng';
 import type { QuestKind, QuestSize } from '../config/types';
 import { SCHEMA_VERSION } from './save';
+import type { MarketSort, MarketFilters } from './marketview';
 
 export const BASE_HOLD_TONS = 20;
 export const BASE_MAX_FUEL = 5;
@@ -75,6 +76,8 @@ export interface Settings {
   musicVolume: number;
   haptics: boolean;
   muted: boolean;
+  marketSort: MarketSort;
+  marketFilters: MarketFilters;
 }
 
 export interface PendingEncounter {
@@ -225,6 +228,8 @@ export function createInitialState(): GameState {
       musicVolume: 0.2,
       haptics: true,
       muted: false,
+      marketSort: 'default',
+      marketFilters: { owned: false, affordable: false, hideContraband: false, tier: null },
     },
     onboarding: { step: 0, complete: false, skipped: false },
     stats: {
