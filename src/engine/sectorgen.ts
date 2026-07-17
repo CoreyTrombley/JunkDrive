@@ -34,6 +34,11 @@ export function generateSectorGoods(sector: number, runSeed: number): Good[] {
     const name = `${material} ${form}`;
     const tier = band + 1 + (sector - 1) * 0; // goods scale via sectorScale(), tier just drives unlock rank pacing
     const unlockRank = sectorUnlockRankForGood(sector, band);
+    const bandMass = [6, 3.75, 1.5, 0.6][band];
+    // Mass rolls from a per-good side rng — NEVER the main `rng` stream, which
+    // must keep emitting the exact legacy sequence for runSeed 0 saves.
+    const massRng = mulberry32((hashSeed(`s${sector}_g${band}-mass`) ^ (runSeed >>> 0)) >>> 0);
+    const mass = Math.round(bandMass * randRange(massRng, 0.7, 1.3) * 100) / 100;
     const anchor = [50, 400, 3000, 40000][band];
     const base = Math.round(anchor * randRange(rng, 0.7, 1.4));
     goods.push({
@@ -43,6 +48,7 @@ export function generateSectorGoods(sector: number, runSeed: number): Good[] {
       tier: tier + 2, // keep above sector-1 tiers for sorting/display purposes
       unlockRank,
       base,
+      mass,
       volatility: volatilities[band],
       contraband: chance(rng, 0.15),
     });

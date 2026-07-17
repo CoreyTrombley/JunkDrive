@@ -9,6 +9,7 @@ export interface Good {
   tier: number;
   unlockRank: number;
   base: number;
+  mass: number; // tons per unit — tonnage hold currency (spec 2026-07-16)
   volatility: Volatility;
   contraband?: boolean;
   flavor?: string;
