@@ -56,7 +56,7 @@ export function generateManifest(state: GameState, rng: RngFn, seq: number, t: n
     (sum, it) => sum + (goodById(it.goodId, runSeed)?.base ?? 0) * sectorScale(state.sector) * it.qty, 0);
   const premium = randRange(rng, 1.7, 2.2);
   const rewardCredits = Math.round(baseValue * premium);
-  const rewardXp = Math.round(1.5 * saleXp(rewardCredits * 0.45));
+  const rewardXp = Math.round(1.5 * saleXp((rewardCredits * 0.45) / sectorScale(state.sector)));
 
   return {
     id: `m${seq}`,

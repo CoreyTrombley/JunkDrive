@@ -58,7 +58,11 @@ export function generateSectorGoods(sector: number, runSeed: number): Good[] {
 }
 
 function sectorUnlockRankForGood(sector: number, band: number): number {
-  const sectorBaseRank = 20 + (sector - 2) * 10;
+  // The rank ladder for goods ends where the gate rank ladder ends (S10 → rank 100);
+  // past S10 the real gate is REACHING the sector at all (goodsCatalogForState is
+  // bounded by maxSectorReached). Without this cap, normalized ranks (~127 at S99)
+  // could never unlock deep-sector goods.
+  const sectorBaseRank = Math.min(20 + (sector - 2) * 10, 100);
   return sectorBaseRank + band * 2;
 }
 

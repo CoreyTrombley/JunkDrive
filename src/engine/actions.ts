@@ -18,7 +18,7 @@ import { RELICS_BY_ID, relicCost, relicMaxLevel } from '../config/relics';
 import { SHIP_UPGRADES_BY_ID, upgradeCost } from '../config/ship';
 import { CODEX_SETS } from '../config/codex';
 import {
-  pulseWave, fastForwardWave, PULSE_INTERVAL_MS, initWave, type ActiveMarketEvent,
+  pulseWave, fastForwardWave, PULSE_INTERVAL_MS, initWave, sectorScale, type ActiveMarketEvent,
 } from './price';
 import { goodById, getPrice, isTradeDisabled, allUnlockedGoods } from './pricing';
 import { applyStockTrade, regenStocks } from './stocks';
@@ -464,7 +464,8 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
   const cost = entry.avgCost * sellQty;
   const profit = revenue - cost;
   const marginFrac = entry.avgCost > 0 ? (effPrice - entry.avgCost) / entry.avgCost : 0;
-  const gainedXp = profit > 0 ? saleXp(profit) : 1;
+  // XP measures play, not sector inflation — normalize by the sector's price scale.
+  const gainedXp = profit > 0 ? saleXp(profit / sectorScale(state.sector)) : 1;
   const newStreakCount = profit > 0 ? Math.min(5, (streakActive ? state.hotStreak.count : 0) + 1) : 0;
 
   setState((s) => {
