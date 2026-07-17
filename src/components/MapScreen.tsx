@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { store, clockTick, getState } from '../engine/store';
 import { STATIONS_BY_ID } from '../config/stations';
 import { MARKET_EVENTS_BY_ID } from '../config/events';
@@ -20,6 +20,17 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
   const [traveling, setTraveling] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hopDoneRef = useRef<(() => void) | null>(null);
+
+  // If the user leaves the Map mid-route, drop the pending hop: the ship simply
+  // stays at its last committed node. Without this, the stale timeout would fire
+  // after unmount, mutate state, and snap the user back to the market tab.
+  useEffect(() => () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = null;
+    hopDoneRef.current = null;
+    onHyperspace(false);
+  }, []);
+
   const t = now();
 
   const scannerLvl = s.shipUpgrades.market_scanner ?? 0;
@@ -187,7 +198,11 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
     {traveling && (
       <div class="hyperspace-overlay">
         <div style={{ fontSize: 40 }}>🌌</div>
-        <div class="hs-label">JUMPING TO {nodeById(map, traveling)?.name.toUpperCase()}…</div>
+        <div class="hs-label">JUMPING TO {(() => {
+          const n = nodeById(map, traveling);
+          const label = n?.kind === 'station' ? stationDisplayName(n.id, s.sector, s.runSeed ?? 0) : n?.name ?? '';
+          return label.toUpperCase();
+        })()}…</div>
         {canSkipTravel(s) && <button class="btn btn-ghost" onClick={skipHop}>SKIP ▶</button>}
       </div>
     )}
