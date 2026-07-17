@@ -8,8 +8,9 @@ import { goodById } from '../engine/pricing';
 import { canClaimDailyStreak } from '../engine/actions';
 import { stationDisplayName } from '../engine/sectorgen';
 import { resonanceNeeded, SECTOR_CAP } from '../engine/formulas';
+import { QuickStats } from './QuickStats';
 
-export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
+export function Hud() {
   const s = store.value;
   void clockTick.value; // subscribe to the 250ms clock for live countdowns
 
@@ -49,8 +50,10 @@ export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
 
   const tickerText = tickerItems[idx % tickerItems.length];
 
+  const [statsOpen, setStatsOpen] = useState(false);
+
   return (
-    <div class="hud">
+    <div class={`hud${statsOpen ? ' hud-raised' : ''}`}>
       <div class="hud-row">
         <div class="hud-credits mono">{formatCredits(s.credits)}</div>
         <div class="hud-mid">
@@ -74,7 +77,9 @@ export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
           R{s.rank}
         </div>
       </div>
-      <div class="ticker" onClick={onOpenTicker}>{tickerText}</div>
+      <div class="ticker" onClick={() => setStatsOpen((o) => !o)}>{tickerText} {statsOpen ? '▴' : '▾'}</div>
+      {statsOpen && <div class="qs-backdrop" onClick={() => setStatsOpen(false)} />}
+      {statsOpen && <QuickStats />}
     </div>
   );
 }
