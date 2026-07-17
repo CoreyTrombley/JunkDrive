@@ -18,7 +18,7 @@ import { RELICS_BY_ID, relicCost, relicMaxLevel } from '../config/relics';
 import { SHIP_UPGRADES_BY_ID, upgradeCost } from '../config/ship';
 import { CODEX_SETS } from '../config/codex';
 import {
-  pulseWave, fastForwardWave, PULSE_INTERVAL_MS, initWave, type ActiveMarketEvent,
+  pulseWave, fastForwardWave, PULSE_INTERVAL_MS, initWave, sectorScale, type ActiveMarketEvent,
 } from './price';
 import { goodById, getPrice, isTradeDisabled, allUnlockedGoods } from './pricing';
 import { applyStockTrade, regenStocks } from './stocks';
@@ -26,7 +26,7 @@ import {
   rigUnitCost, rigBatchCost, maxAffordableRigQty, milestoneMultiplier,
   codexBonusMult, globalIncomeMult, totalYardRatePerSec, gateToll,
   sectorUnlockRank, darkMatterFromLifetime, offlineCapMs, luckyFlipChance,
-  rigTapPayout,
+  rigTapPayout, resonanceNeeded, RESONANCE_FLIP_FLOOR, SECTOR_CAP,
 } from './formulas';
 import {
   maxHold, usedHold, freeCapacityUnits, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
@@ -52,19 +52,19 @@ const BOOST_DURATION_MS = 10 * 60_000;
 // Small helpers
 // ---------------------------------------------------------------------------
 
-function addCargo(cargo: Record<string, CargoEntry>, goodId: string, qty: number, atCost: number): Record<string, CargoEntry> {
+function addCargo(cargo: Record<string, CargoEntry>, goodId: string, qty: number, atCost: number, srcStation?: string): Record<string, CargoEntry> {
   if (qty <= 0) return cargo;
   const existing = cargo[goodId] || { qty: 0, avgCost: 0 };
   const newQty = existing.qty + qty;
   const newAvg = newQty > 0 ? (existing.qty * existing.avgCost + qty * atCost) / newQty : 0;
-  return { ...cargo, [goodId]: { qty: newQty, avgCost: newAvg } };
+  return { ...cargo, [goodId]: { qty: newQty, avgCost: newAvg, srcStation: srcStation ?? existing.srcStation } };
 }
 
 function dropCargoFraction(cargo: Record<string, CargoEntry>, pct: number): Record<string, CargoEntry> {
   const out: Record<string, CargoEntry> = {};
   for (const [gid, c] of Object.entries(cargo)) {
     const newQty = Math.floor(c.qty * (1 - pct));
-    if (newQty > 0) out[gid] = { qty: newQty, avgCost: c.avgCost };
+    if (newQty > 0) out[gid] = { ...c, qty: newQty };
   }
   return out;
 }
@@ -168,7 +168,25 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
     lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
     visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
+    gateResonance: (loaded as Partial<GameState>).gateResonance ?? 0,
+    flipProgress: (loaded as Partial<GameState>).flipProgress ?? {},
+    pendingRimClamp: (loaded as Partial<GameState>).pendingRimClamp ?? false,
   };
+
+  if (state.sector > SECTOR_CAP) {
+    if (!Array.isArray(state.quests)) state = { ...state, quests: [] }; // stampCodex maps over quests
+    state = {
+      ...state,
+      sector: SECTOR_CAP,
+      maxSectorReached: Math.min(state.maxSectorReached, SECTOR_CAP),
+      bests: { ...state.bests, deepestSector: Math.min(state.bests.deepestSector, SECTOR_CAP) },
+      currentStation: state.currentStation.startsWith('wp-') ? 'rust_harbor' : state.currentStation,
+      pendingRimClamp: true,
+    };
+    state = stampCodex(state, 'jackpots', 'rim_walker');
+    state = stampCodex(state, 'jackpots', 'beyond_the_rim');
+  }
+
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
 
@@ -255,6 +273,9 @@ export function importSave(code: string): { ok: boolean; reason?: string } {
       manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
       lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
       visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
+      gateResonance: loaded.gateResonance ?? 0,
+      flipProgress: loaded.flipProgress ?? {},
+      pendingRimClamp: loaded.pendingRimClamp ?? false,
     };
     store.value = merged;
     writeSave(merged);
@@ -429,7 +450,7 @@ export function buyGood(goodId: string, qty: number): { ok: boolean; reason?: st
     let st: GameState = {
       ...s,
       credits: s.credits - cost,
-      cargo: addCargo(s.cargo, goodId, buyQty, price),
+      cargo: addCargo(s.cargo, goodId, buyQty, price, s.currentStation),
       stats: {
         ...s.stats,
         creditsSpent: s.stats.creditsSpent + cost,
@@ -464,14 +485,15 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
   const cost = entry.avgCost * sellQty;
   const profit = revenue - cost;
   const marginFrac = entry.avgCost > 0 ? (effPrice - entry.avgCost) / entry.avgCost : 0;
-  const gainedXp = profit > 0 ? saleXp(profit) : 1;
+  // XP measures play, not sector inflation — normalize by the sector's price scale.
+  const gainedXp = profit > 0 ? saleXp(profit / sectorScale(state.sector)) : 1;
   const newStreakCount = profit > 0 ? Math.min(5, (streakActive ? state.hotStreak.count : 0) + 1) : 0;
 
   setState((s) => {
     const remainingQty = entry.qty - sellQty;
     const newCargo = { ...s.cargo };
     if (remainingQty <= 0) delete newCargo[goodId];
-    else newCargo[goodId] = { qty: remainingQty, avgCost: entry.avgCost };
+    else newCargo[goodId] = { ...entry, qty: remainingQty };
 
     let st: GameState = {
       ...s,
@@ -493,6 +515,16 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
       },
     };
     st = stampCodex(st, 'goods', goodId);
+    if (profit > 0 && entry.srcStation !== s.currentStation && s.sector < SECTOR_CAP) {
+      const prev = st.flipProgress[goodId] ?? 0;
+      const next = prev + profit / sectorScale(s.sector);
+      st = { ...st, flipProgress: { ...st.flipProgress, [goodId]: next } };
+      // One charge per good per docking: award only on the first crossing of the floor.
+      if (prev < RESONANCE_FLIP_FLOOR && next >= RESONANCE_FLIP_FLOOR) {
+        st = { ...st, gateResonance: st.gateResonance + 1 };
+        if (resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+1 ⚡', kind: 'info' });
+      }
+    }
     st = applyXpAndRankUps(st);
     st = progressQuests(st, (q) => {
       if (q.kind === 'flip_units' && (!q.goodId || q.goodId === goodId)) return { ...q, progress: Math.min(q.goal, q.progress + sellQty) };
@@ -544,6 +576,11 @@ export function deliverManifest(manifestId: string): { ok: boolean; reason?: str
       stats: { ...s.stats, totalSales: s.stats.totalSales + 1, creditsEarned: s.stats.creditsEarned + m.rewardCredits },
       bests: { ...s.bests, biggestSale: Math.max(s.bests.biggestSale, m.rewardCredits) },
     };
+    const itemsMoved = m.items.every((it) => s.cargo[it.goodId]?.srcStation !== m.stationId);
+    if (itemsMoved && s.sector < SECTOR_CAP) {
+      st = { ...st, gateResonance: st.gateResonance + 3 };
+      if (resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+3 ⚡', kind: 'info' });
+    }
     st = applyXpAndRankUps(st);
     st = progressQuests(st, (q) => (q.kind === 'deliver_manifest' ? { ...q, progress: q.goal } : q));
     st = maintainManifests(st, t);
@@ -646,7 +683,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
         const good = pick(sessionRng, unlocked);
         const qty = Math.min(randInt(sessionRng, 1, 3), freeCapacityUnits(st, good.id));
         if (qty > 0) {
-          st = { ...st, cargo: addCargo(st.cargo, good.id, qty, 0) };
+          st = { ...st, cargo: addCargo(st.cargo, good.id, qty, 0, st.currentStation) };
           setToast({ text: `Found ${qty}× ${good.name} floating by. Finders keepers.`, icon: good.icon });
         }
       }
@@ -679,7 +716,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
         // roughly mass-independent instead of scaling with 1/mass.
         const budgetUnits = Math.max(3, Math.floor((maxHold(st) * 0.5) / good.mass));
         const free = Math.min(freeCapacityUnits(st, good.id), budgetUnits, 60);
-        if (free > 0) st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0) };
+        if (free > 0) st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0, st.currentStation) };
       } else if (jackpotId === 'golden_buyer') {
         const ev: ActiveMarketEvent = {
           id: `golden-${t}`, kind: 'golden_buyer', stationId: st.currentStation, goodId: null,
@@ -706,7 +743,7 @@ export function completeJump(
     const map = generateSectorMap(s.sector, s.runSeed ?? 0);
     const node = nodeById(map, targetNodeId);
     const isStation = node?.kind === 'station';
-    let state: GameState = { ...s, currentStation: targetNodeId, stats: { ...s.stats, totalJumps: s.stats.totalJumps + 1 } };
+    let state: GameState = { ...s, currentStation: targetNodeId, flipProgress: {}, stats: { ...s.stats, totalJumps: s.stats.totalJumps + 1 } };
     if (isStation) state = stampCodex(state, 'stations', targetNodeId);
     // Real-time pulses (tick/bootGame) do stock regen; this arrival-forced pulse
     // only fast-forwards waves so hopping doesn't heal perturbed stocks for free.
@@ -744,6 +781,10 @@ export function completeJump(
 
 export function dismissPendingJackpot(): void {
   setState((s) => ({ ...s, pendingJackpot: null }));
+}
+
+export function acknowledgeRimClamp(): void {
+  setState((s) => ({ ...s, pendingRimClamp: false }));
 }
 
 // ---------------------------------------------------------------------------
@@ -805,7 +846,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
             const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 3);
             const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
             const qty = Math.min(randInt(sessionRng, minQ, maxQ), freeCapacityUnits(st, good.id));
-            st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
+            st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0, st.currentStation) };
             resultText = qty > 0 ? `Salvaged ${qty}× ${good.name}. Free loot.` : 'Hold was full — grabbed nothing.';
             outcome = 'good';
           } else {
@@ -835,7 +876,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           const cost = dealPrice * qty;
           const isGoodDeal = chance(sessionRng, goodOdds) || rolodex;
           if (qty > 0 && st.credits >= cost && isGoodDeal) {
-            st = { ...st, credits: st.credits - cost, cargo: addCargo(st.cargo, good.id, qty, dealPrice) };
+            st = { ...st, credits: st.credits - cost, cargo: addCargo(st.cargo, good.id, qty, dealPrice, st.currentStation) };
             resultText = `Bought ${qty}× ${good.name} at ${Math.round((1 - pct) * 100)}% off galactic average.`;
             outcome = 'good';
           } else {
@@ -882,7 +923,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
               const unlocked = allUnlockedGoods(st);
               const good = unlocked.length ? pick(sessionRng, unlocked) : GOODS[0];
               const qty = Math.min(randInt(sessionRng, 2, 5), freeCapacityUnits(st, good.id));
-              st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
+              st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0, st.currentStation) };
               resultText = `They gave you ${qty}× ${good.name} in thanks.`;
               outcome = 'good';
             } else {
@@ -1237,7 +1278,7 @@ export function buyRelic(relicId: string): { ok: boolean; reason?: string } {
 // ---------------------------------------------------------------------------
 
 export function canEnterNextSector(state: GameState): boolean {
-  return state.rank >= sectorUnlockRank(state.sector + 1);
+  return state.sector < SECTOR_CAP && state.rank >= sectorUnlockRank(state.sector + 1);
 }
 
 export function nextSectorToll(state: GameState): number {
@@ -1246,29 +1287,45 @@ export function nextSectorToll(state: GameState): number {
 
 export function payGateToll(): { ok: boolean; reason?: string } {
   const state = getState();
+  if (state.sector >= SECTOR_CAP) return { ok: false, reason: 'The lanes end here.' };
   const dest = state.sector + 1;
   if (!canEnterNextSector(state)) return { ok: false, reason: `Unlocks at Rank ${sectorUnlockRank(dest)}.` };
   const map = generateSectorMap(state.sector, state.runSeed ?? 0);
   if (nodeById(map, state.currentStation)?.kind !== 'gate') return { ok: false, reason: 'Dock at the Sector Gate first.' };
+  const need = resonanceNeeded(dest);
+  if (state.gateResonance < need) {
+    return { ok: false, reason: `Gate uncharged — ${need - state.gateResonance} more resonance.` };
+  }
   const toll = nextSectorToll(state);
   if (state.credits < toll) return { ok: false, reason: 'Not enough credits.' };
   setState((s) => {
     const newGoods = generateSectorGoods(dest, s.runSeed ?? 0);
     const waves = { ...s.waves };
     for (const g of newGoods) if (!waves[g.id]) waves[g.id] = initWave();
-    return {
+    let st: GameState = {
       ...s,
       credits: s.credits - toll,
       sector: dest,
+      gateResonance: 0,
+      flipProgress: {},
       currentStation: 'rust_harbor',
       maxSectorReached: Math.max(s.maxSectorReached, dest),
       waves,
       bests: { ...s.bests, deepestSector: Math.max(s.bests.deepestSector, dest) },
     };
+    if (dest === SECTOR_CAP) st = stampCodex(st, 'jackpots', 'rim_walker');
+    return st;
   });
-  emit({ type: 'sfx', id: 'toll' });
-  emit({ type: 'confetti', power: 'big' });
-  emit({ type: 'toast', text: `SECTOR ${dest} — everything's about to get expensive.`, icon: '🌌' });
+  if (dest === SECTOR_CAP) {
+    emit({ type: 'sfx', id: 'eternal' });
+    emit({ type: 'confetti', power: 'big' });
+    emit({ type: 'haptic', pattern: 'jackpot' });
+    emit({ type: 'toast', text: 'THE RIM — SECTOR 99. There is nothing further. There is nothing better.', icon: '🎖️' });
+  } else {
+    emit({ type: 'sfx', id: 'toll' });
+    emit({ type: 'confetti', power: 'big' });
+    emit({ type: 'toast', text: `SECTOR ${dest} — everything's about to get expensive.`, icon: '🌌' });
+  }
   return { ok: true };
 }
 
@@ -1305,8 +1362,9 @@ export function claimSalvage(): { ok: boolean; reason?: string } {
   if (qty <= 0) return { ok: false, reason: 'Hold is full.' };
   setState((s) => ({
     ...s,
-    cargo: addCargo(s.cargo, good.id, qty, 0),
+    cargo: addCargo(s.cargo, good.id, qty, 0, s.currentStation),
     lastSalvageAt: { ...s.lastSalvageAt, [s.currentStation]: t },
+    gateResonance: s.sector < SECTOR_CAP ? s.gateResonance + 1 : s.gateResonance,
   }));
   emit({ type: 'sfx', id: 'salvage' });
   emit({ type: 'toast', text: `Hauled in ${qty}× ${good.name}.`, icon: good.icon });

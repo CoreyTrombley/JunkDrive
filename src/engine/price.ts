@@ -60,7 +60,9 @@ export function eventMultiplier(events: ActiveMarketEvent[], stationId: string, 
 }
 
 export function sectorScale(sector: number): number {
-  return Math.pow(8, sector - 1);
+  // Full ×8 jumps through S10, then +60%/sector — the D2-style taper that keeps
+  // endgame numbers meaningful (S99 ≈ 2e26 instead of 8^98 ≈ 3e88). Spec 2026-07-17.
+  return Math.pow(8, Math.min(sector, 10) - 1) * Math.pow(1.6, Math.max(0, sector - 10));
 }
 
 export function computePrice(params: {

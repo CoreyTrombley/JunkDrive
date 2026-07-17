@@ -8,7 +8,7 @@ export type SfxId =
   | 'jackpot' | 'coin_cascade' | 'cant_afford' | 'wormhole' | 'toll'
   | 'upgrade' | 'manager_hire' | 'milestone' | 'daily_claim' | 'boost'
   | 'encounter_good' | 'encounter_bad' | 'manifest_new' | 'manifest_deliver'
-  | 'refuel' | 'salvage' | 'express';
+  | 'refuel' | 'salvage' | 'express' | 'eternal';
 
 export type HapticId = 'tap' | 'sell' | 'rank_up' | 'jackpot' | 'error';
 

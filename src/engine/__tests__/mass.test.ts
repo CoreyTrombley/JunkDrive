@@ -40,3 +40,27 @@ describe('good masses', () => {
     expect(s3.map((g) => g.name)).toEqual(['Irradiated Filaments', 'Ancient Husks', 'Crystalline Lattices', 'Phase-Shifted Ingots']);
   });
 });
+
+describe('seeded good icons', () => {
+  const POOLS = [
+    ['🔩', '⚙️', '🧱', '🪨', '🛢️', '📦'],
+    ['🔮', '💠', '🧪', '🪙', '🎛️', '🧿'],
+    ['🧬', '🦠', '💎', '🧫', '⚗️', '🪬'],
+    ['🛰️', '☄️', '🌠', '🪐', '⚛️', '🌌'],
+  ];
+
+  it('icons come from the band pool, deterministically', () => {
+    const a = generateSectorGoods(2, 777);
+    const b = generateSectorGoods(2, 777);
+    expect(a.map((g) => g.icon)).toEqual(b.map((g) => g.icon));
+    a.forEach((g, band) => expect(POOLS[band]).toContain(g.icon));
+  });
+
+  it('band icons VARY across sectors (the reported bug: they were all identical)', () => {
+    for (let band = 0; band < 4; band++) {
+      const icons = new Set<string>();
+      for (let s = 2; s <= 12; s++) icons.add(generateSectorGoods(s, 0)[band].icon);
+      expect(icons.size).toBeGreaterThan(1);
+    }
+  });
+});

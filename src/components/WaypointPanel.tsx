@@ -2,8 +2,8 @@ import { useState } from 'preact/hooks';
 import { store, clockTick } from '../engine/store';
 import type { MapNode } from '../engine/mapgen';
 import { goodById, getPrice } from '../engine/pricing';
-import { buyFuelPip, claimSalvage, payGateToll, canEnterNextSector, nextSectorToll } from '../engine/actions';
-import { sectorUnlockRank } from '../engine/formulas';
+import { buyFuelPip, claimSalvage, payGateToll, nextSectorToll } from '../engine/actions';
+import { sectorUnlockRank, SECTOR_CAP, resonanceNeeded } from '../engine/formulas';
 import { maxFuel, netWorth } from '../engine/derived';
 import { formatCredits, formatNum, formatDuration } from '../engine/num';
 import { TradeSheet } from './TradeSheet';
@@ -77,18 +77,40 @@ export function WaypointPanel({ node }: { node: MapNode }) {
         );
       })()}
 
-      {node.kind === 'gate' && (
-        <div class="more-section">
-          {canEnterNextSector(s) ? (
-            <div class="list-row">
-              <span>🌀 Sector {s.sector + 1} — toll {formatCredits(nextSectorToll(s))}</span>
-              <button class="btn btn-primary" disabled={s.credits < nextSectorToll(s)} onClick={() => payGateToll()}>PAY TOLL</button>
+      {node.kind === 'gate' && (() => {
+        if (s.sector >= SECTOR_CAP) {
+          return (
+            <div class="more-section">
+              <div class="empty-hint">🌌 THE RIM — Sector 99. The lanes end here. You walked them all.</div>
             </div>
-          ) : (
-            <div class="empty-hint">The gate ignores you. Reach Rank {sectorUnlockRank(s.sector + 1)}.</div>
-          )}
-        </div>
-      )}
+          );
+        }
+        const dest = s.sector + 1;
+        const rankReq = sectorUnlockRank(dest);
+        if (rankReq > 0 && s.rank < rankReq) {
+          return (
+            <div class="more-section">
+              <div class="empty-hint">The gate ignores you. Reach Rank {rankReq}.</div>
+            </div>
+          );
+        }
+        const need = resonanceNeeded(dest);
+        const charged = s.gateResonance >= need;
+        return (
+          <div class="more-section">
+            {need > 0 && (
+              <div class="list-row">
+                <span>⚡ Resonance {formatNum(Math.min(s.gateResonance, need))} / {formatNum(need)}</span>
+                <span class="mono" style={{ fontSize: 10, opacity: 0.7 }}>{charged ? 'CHARGED' : 'flips · contracts · salvage'}</span>
+              </div>
+            )}
+            <div class="list-row">
+              <span>🌀 Sector {dest} — toll {formatCredits(nextSectorToll(s))}</span>
+              <button class="btn btn-primary" disabled={!charged || s.credits < nextSectorToll(s)} onClick={() => payGateToll()}>PAY TOLL</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {node.kind === 'beacon' && <div class="empty-hint">Nothing to trade. But you were here, and the beacon knows it.</div>}
     </div>

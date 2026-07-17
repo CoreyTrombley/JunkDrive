@@ -96,11 +96,24 @@ export function totalYardRatePerSec(state: GameState, rigs: Rig[], atTime: numbe
 }
 
 export function gateToll(destinationSector: number): number {
-  return 2_000_000 * Math.pow(15, destinationSector - 2);
+  // Tapers with income past S10 (1.5 < 1.6): credits are the entry fee, resonance is the wall.
+  return 2_000_000 * Math.pow(15, Math.min(destinationSector, 10) - 2) * Math.pow(1.5, Math.max(0, destinationSector - 10));
 }
 
 export function sectorUnlockRank(destinationSector: number): number {
-  return 20 + (destinationSector - 2) * 10;
+  // Rank gates end at S10 — beyond that, Gate Resonance is the only gate.
+  return destinationSector <= 10 ? 20 + (destinationSector - 2) * 10 : 0;
+}
+
+export const SECTOR_CAP = 99;
+
+/** Sector-normalized profit a sale needs to earn +1 Gate Resonance. */
+export const RESONANCE_FLIP_FLOOR = 2000;
+
+/** Charges required to open the gate INTO `destinationSector` (D2-99 curve, sim variant G). */
+export function resonanceNeeded(destinationSector: number): number {
+  if (destinationSector <= 10) return 0;
+  return Math.ceil(6 * Math.pow(1.062, destinationSector - 10));
 }
 
 export function darkMatterFromLifetime(lifetime: number): number {

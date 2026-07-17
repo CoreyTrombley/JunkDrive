@@ -11,6 +11,7 @@ import {
 } from '../engine/actions';
 import { formatCredits, formatNum, formatDuration, formatPct } from '../engine/num';
 import { now } from '../engine/time';
+import { emit } from '../engine/bus';
 
 function topEntry(record: Record<string, number>): { id: string; qty: number } | null {
   let best: { id: string; qty: number } | null = null;
@@ -28,6 +29,23 @@ function codexIcon(kind: string, id: string): string {
   if (kind === 'events') return MARKET_EVENTS_BY_ID[id]?.icon ?? '❔';
   return '❔';
 }
+
+function codexName(kind: string, id: string): string {
+  if (kind === 'goods') return goodById(id)?.name ?? id;
+  if (kind === 'stations') return STATIONS_BY_ID[id]?.name ?? id;
+  if (kind === 'jackpots') return JACKPOTS_BY_ID[id]?.name ?? id;
+  if (kind === 'encounters') return ENCOUNTERS_BY_ID[id]?.name ?? id;
+  if (kind === 'events') return MARKET_EVENTS_BY_ID[id]?.name ?? id;
+  return id;
+}
+
+const CODEX_HINTS: Record<string, string> = {
+  goods: 'Undiscovered — sell this good once to log it.',
+  stations: 'Undiscovered — dock there once to log it.',
+  jackpots: 'Undiscovered — a rare arrival moment. Keep flying.',
+  encounters: 'Undiscovered — a chance meeting in the void.',
+  events: 'Undiscovered — a market signal you have not witnessed.',
+};
 
 function PrestigeButton() {
   const [progress, setProgress] = useState(0);
@@ -145,7 +163,7 @@ export function MoreScreen() {
         ) : (
           <div class="codex-grid">
             {s.milestones.slice().sort((a, b) => a - b).map((p) => (
-              <div key={p} class="codex-cell got" title={`10^${p}`}>🏆</div>
+              <div key={p} class="codex-cell got" onClick={() => emit({ type: 'toast', text: `Milestone — crossed ₡10^${p} net worth`, icon: '🏆' })}>🏆</div>
             ))}
           </div>
         )}
@@ -161,7 +179,23 @@ export function MoreScreen() {
               <div class="cs-title"><span>{set.icon} {set.name}</span><span class="pct">{got}/{set.memberIds.length}</span></div>
               <div class="codex-grid">
                 {set.memberIds.map((id) => (
-                  <div key={id} class={`codex-cell${bucket[id] ? ' got' : ''}`}>{codexIcon(set.kind, id)}</div>
+                  <div
+                    key={id}
+                    class={`codex-cell${bucket[id] ? ' got' : ''}`}
+                    onClick={() =>
+                      emit({
+                        type: 'toast',
+                        text: bucket[id]
+                          ? codexName(set.kind, id)
+                          : set.id === 'honor_badges'
+                            ? 'A monument. Some things must be walked, not found.'
+                            : CODEX_HINTS[set.kind] ?? '???',
+                        icon: bucket[id] ? codexIcon(set.kind, id) : '❔',
+                      })
+                    }
+                  >
+                    {codexIcon(set.kind, id)}
+                  </div>
                 ))}
               </div>
             </div>
@@ -256,7 +290,7 @@ export function MoreScreen() {
 
       <div class="more-section">
         <div class="section-label">About</div>
-        <div class="empty-hint">JUNKRUN v2.1 · Buy junk. Plot routes. Work the market. Endless.</div>
+        <div class="empty-hint">JUNKRUN v2.2 · Buy junk. Plot routes. Work the market. Endless.</div>
       </div>
     </div>
   );

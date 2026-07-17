@@ -1,8 +1,8 @@
 import { store, clockTick } from '../engine/store';
 import { canDeliver } from '../engine/manifests';
 import { deliverManifest } from '../engine/actions';
-import { goodById } from '../engine/pricing';
-import { STATIONS_BY_ID } from '../config/stations';
+import { goodById, getPrice } from '../engine/pricing';
+import { STATIONS_BY_ID, STATIONS } from '../config/stations';
 import { formatCredits, formatDuration, formatNum } from '../engine/num';
 import { now } from '../engine/time';
 import { stationDisplayName } from '../engine/sectorgen';
@@ -18,6 +18,15 @@ export function ContractsPanel() {
       {s.manifests.filter((m) => m.expiresAt > t).map((m) => {
         const station = STATIONS_BY_ID[m.stationId];
         const ready = canDeliver(s, m);
+        const cheapestSource = (goodId: string): string | null => {
+          let best: { id: string; price: number } | null = null;
+          for (const st of STATIONS) {
+            if (st.unlockRank > s.rank) continue;
+            const p = getPrice(s, st.id, goodId);
+            if (!best || p < best.price) best = { id: st.id, price: p };
+          }
+          return best ? stationDisplayName(best.id, s.sector, s.runSeed ?? 0) : null;
+        };
         return (
           <div key={m.id} class={`contract-row${ready ? ' ready' : ''}`}>
             <div class="c-main">
@@ -28,7 +37,8 @@ export function ContractsPanel() {
                   const have = s.cargo[it.goodId]?.qty ?? 0;
                   return (
                     <span key={it.goodId} class={`c-item${have >= it.qty ? ' have' : ''}`}>
-                      {g?.icon} {formatNum(have)}/{formatNum(it.qty)}
+                      {g?.icon} {g?.name ?? it.goodId} {formatNum(have)}/{formatNum(it.qty)}
+                      {have < it.qty && <span class="c-src"> · 📍 {cheapestSource(it.goodId) ?? '?'}</span>}
                     </span>
                   );
                 })}
