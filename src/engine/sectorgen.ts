@@ -15,7 +15,12 @@ const FORM_POOL = [
   'Slag Cores', 'Coils', 'Husks', 'Spores', 'Shards', 'Capacitors', 'Ingots', 'Vials',
   'Filaments', 'Lattices', 'Cinders', 'Nodes', 'Husks', 'Plating', 'Threads', 'Kernels',
 ];
-const TIER_ICONS = ['🔩', '🔮', '🧬', '🛰️'];
+const TIER_ICON_POOLS = [
+  ['🔩', '⚙️', '🧱', '🪨', '🛢️', '📦'],
+  ['🔮', '💠', '🧪', '🪙', '🎛️', '🧿'],
+  ['🧬', '🦠', '💎', '🧫', '⚗️', '🪬'],
+  ['🛰️', '☄️', '🌠', '🪐', '⚛️', '🌌'],
+];
 
 const STATION_PREFIX = ['CINDER', 'GLACIER', 'RUSTED', 'GILDED', 'HOLLOW', 'FERAL', 'STATIC', 'DRIFTING', 'BROKEN', 'SILENT'];
 const STATION_SUFFIX = ['FORGE', 'DOCK', 'WORKS', 'PIT', 'REACH', 'HOLD', 'YARD', 'SPIRE', 'BELT', 'GATE'];
@@ -40,12 +45,16 @@ export function generateSectorGoods(sector: number, runSeed: number): Good[] {
     // must keep emitting the exact legacy sequence for runSeed 0 saves.
     const massRng = mulberry32((hashSeed(`s${sector}_g${band}-mass`) ^ (runSeed >>> 0)) >>> 0);
     const mass = Math.round(bandMass * randRange(massRng, 0.7, 1.3) * 100) / 100;
+    // Icon rolls from its own side rng — same isolation rule as the mass roll:
+    // the main `rng` stream must keep emitting the exact legacy sequence.
+    const iconRng = mulberry32((hashSeed(`s${sector}_g${band}-icon`) ^ (runSeed >>> 0)) >>> 0);
+    const icon = TIER_ICON_POOLS[band][Math.floor(iconRng() * TIER_ICON_POOLS[band].length)];
     const anchor = [50, 400, 3000, 40000][band];
     const base = Math.round(anchor * randRange(rng, 0.7, 1.4));
     goods.push({
       id: `s${sector}_g${band}`,
       name,
-      icon: TIER_ICONS[band],
+      icon,
       tier: tier + 2, // keep above sector-1 tiers for sorting/display purposes
       unlockRank,
       base,
