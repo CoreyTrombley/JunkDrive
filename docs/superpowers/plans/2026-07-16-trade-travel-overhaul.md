@@ -2735,9 +2735,24 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 16: Final verification
+### Task 16: Version bump + final verification
 
-**Files:** none (verification only).
+**Files:**
+- Modify: `package.json` (version), `src/components/MoreScreen.tsx` (About line)
+
+- [ ] **Step 0: Bump to 2.0.0** — this overhaul changes core play (tonnage cargo, lane travel, living economy): a major version.
+  - `package.json`: `"version": "1.0.0"` → `"version": "2.0.0"`.
+  - `src/components/MoreScreen.tsx` About section: replace `JUNKRUN v1.0 · Buy junk. Jump stars. Get rich. Endless.` with `JUNKRUN v2.0 · Buy junk. Plot routes. Work the market. Endless.`
+  - Commit:
+
+```bash
+git add package.json src/components/MoreScreen.tsx
+git commit -m "chore: v2.0.0 — tonnage cargo, living economy, warp-lane map
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+(Release tags happen at merge time, not in this task: `v1.1.0` retroactively on the balance/audio merge `bdeaa26`, `v2.0.0` on this branch's merge commit.)
 
 - [ ] **Step 1: Full gate**
 
