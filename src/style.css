@@ -496,3 +496,12 @@ button { font-family: inherit; }
 .g-stock { font-size: 9px; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 4px; }
 .g-stock.scarce { color: #ffb37a; border: 1px solid #ffb37a55; }
 .g-stock.glut { color: #7fd8ff; border: 1px solid #7fd8ff55; }
+
+.contracts { margin-top: 12px; }
+.contract-row { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
+.contract-row.ready { border: 1px solid var(--accent); }
+.contract-row .c-main { flex: 1; min-width: 0; }
+.contract-row .c-dest { font-size: 11px; opacity: 0.85; }
+.contract-row .c-items { display: flex; gap: 8px; margin-top: 3px; font-size: 12px; }
+.contract-row .c-item { opacity: 0.6; }
+.contract-row .c-item.have { opacity: 1; color: var(--profit, #7dff9a); }

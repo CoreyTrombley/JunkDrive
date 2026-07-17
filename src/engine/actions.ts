@@ -337,7 +337,7 @@ function maintainManifests(state: GameState, t: number): GameState {
     seq++;
   }
   st = { ...st, manifests: [...live, ...added], manifestSeq: seq };
-  if (added.length && state.manifests.length > 0) emit({ type: 'sfx', id: 'quest_claim' }); // Task 9 swaps this to 'manifest_new'
+  if (added.length && state.manifests.length > 0) emit({ type: 'sfx', id: 'manifest_new' });
   return st;
 }
 
@@ -544,7 +544,7 @@ export function deliverManifest(manifestId: string): { ok: boolean; reason?: str
     st = checkMilestones(st);
     return st;
   });
-  emit({ type: 'sfx', id: 'quest_claim' }); // Task 9 upgrades this to 'manifest_deliver'
+  emit({ type: 'sfx', id: 'manifest_deliver' });
   emit({ type: 'haptic', pattern: 'sell' });
   emit({ type: 'confetti', power: 'small' });
   emit({ type: 'floater', text: formatSignedCredits(m.rewardCredits), kind: 'profit' });

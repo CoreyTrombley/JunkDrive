@@ -397,6 +397,14 @@ class Synth {
         this.tone(196, 0.25, { type: 'sawtooth', startFreq: 260, gain: 0.16 });
         this.tone(130.81, 0.3, { type: 'sawtooth', gain: 0.12, delay: 0.12 });
         break;
+      case 'manifest_new':
+        this.tone(440, 0.09, { type: 'square', gain: 0.12 });
+        this.tone(587.33, 0.12, { type: 'square', gain: 0.14, delay: 0.09 });
+        break;
+      case 'manifest_deliver':
+        [392, 523.25, 659.25, 783.99].forEach((f, i) => this.tone(f, 0.12, { type: 'triangle', gain: 0.18, delay: i * 0.07 }));
+        this.noise(0.25, { gain: 0.08, filterType: 'highpass', filterFreq: 6000, delay: 0.2 });
+        break;
     }
   }
 

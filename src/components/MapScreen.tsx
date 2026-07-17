@@ -1,5 +1,6 @@
 import { useRef, useState } from 'preact/hooks';
 import { store, clockTick } from '../engine/store';
+import { ContractsPanel } from './ContractsPanel';
 import { STATIONS } from '../config/stations';
 import { MARKET_EVENTS_BY_ID } from '../config/events';
 import { travelDurationMs, canSkipTravel } from '../engine/derived';
@@ -101,6 +102,8 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
           </div>
         )}
       </div>
+
+      <ContractsPanel />
 
       <div class="section-label">Active Signals</div>
       {s.activeEvents.filter((e) => e.expiresAt > t).length === 0 && <div class="empty-hint">Nothing spiking right now. Fly and find out.</div>}
