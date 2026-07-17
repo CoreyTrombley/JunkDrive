@@ -10,6 +10,8 @@ import { now } from '../engine/time';
 import { applyMarketView, SORT_LABELS, type MarketSort } from '../engine/marketview';
 import { updateSettings } from '../engine/actions';
 import { getStock, stockBaseline } from '../engine/stocks';
+import { generateSectorMap, nodeById } from '../engine/mapgen';
+import { WaypointPanel } from './WaypointPanel';
 
 function Sparkline({ history, volatility }: { history: number[]; volatility: keyof typeof VOLATILITY_BANDS }) {
   const band = VOLATILITY_BANDS[volatility];
@@ -27,6 +29,9 @@ export function MarketScreen() {
   const s = store.value;
   void clockTick.value;
   const [sheet, setSheet] = useState<{ good: Good; mode: 'buy' | 'sell' } | null>(null);
+  const map = generateSectorMap(s.sector, s.runSeed ?? 0);
+  const node = nodeById(map, s.currentStation);
+  if (node && node.kind !== 'station') return <WaypointPanel node={node} />;
   const station = STATIONS_BY_ID[s.currentStation];
   const t = now();
 

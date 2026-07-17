@@ -8,6 +8,7 @@ import { getState } from './store';
 import { computePrice, eventMultiplier, type ActiveMarketEvent } from './price';
 import { now } from './time';
 import { stockBaseline, stockPriceMult } from './stocks';
+import { mulberry32, hashSeed } from './rng';
 
 const sectorGoodRe = /^s(\d+)_g(\d+)/;
 
@@ -64,6 +65,10 @@ export function goodById(goodId: string, runSeed = activeRunSeed()): Good | unde
 }
 
 export function biasFor(stationId: string, good: Good, runSeed = activeRunSeed()): number {
+  if (stationId.startsWith('wp-')) {
+    const r = mulberry32((hashSeed(`${stationId}:${good.id}`) ^ (runSeed >>> 0)) >>> 0);
+    return 0.95 + r() * 0.2; // outposts trade near galactic average
+  }
   if (GOODS_BY_ID[good.id]) {
     if (runSeed === 0 || stationId === 'the_signal') return stationBias(stationId, good.id);
     return runBiasTableS1(runSeed)[stationId]?.[good.id] ?? stationBias(stationId, good.id);

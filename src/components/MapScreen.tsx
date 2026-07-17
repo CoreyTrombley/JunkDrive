@@ -1,61 +1,92 @@
 import { useRef, useState } from 'preact/hooks';
-import { store, clockTick } from '../engine/store';
-import { ContractsPanel } from './ContractsPanel';
-import { STATIONS } from '../config/stations';
+import { store, clockTick, getState } from '../engine/store';
+import { STATIONS_BY_ID } from '../config/stations';
 import { MARKET_EVENTS_BY_ID } from '../config/events';
 import { travelDurationMs, canSkipTravel } from '../engine/derived';
-import { startJump, completeJump, canEnterNextSector, nextSectorToll, payGateToll } from '../engine/actions';
-import { sectorUnlockRank } from '../engine/formulas';
+import { startJump, completeJump } from '../engine/actions';
 import { bestRoute, goodById } from '../engine/pricing';
+import { generateSectorMap, nodeById, GATE_NODE_ID, type MapNode } from '../engine/mapgen';
+import { routeThrough } from '../engine/routing';
 import { formatCredits, formatDuration, formatPct } from '../engine/num';
 import { dressStationForSector } from '../engine/sectorgen';
+import { ContractsPanel } from './ContractsPanel';
 import { now } from '../engine/time';
 
 export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: boolean) => void; onArrive: () => void }) {
   const s = store.value;
   void clockTick.value;
-  const [selected, setSelected] = useState<string | null>(null);
+  const map = generateSectorMap(s.sector, s.runSeed ?? 0);
+  const [stops, setStops] = useState<string[]>([]);
   const [traveling, setTraveling] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hopDoneRef = useRef<(() => void) | null>(null);
   const t = now();
 
-  const positioned = STATIONS.map((st, i) => {
-    const angle = (i / STATIONS.length) * Math.PI * 2 - Math.PI / 2;
-    const r = 42;
-    return { st, x: 50 + r * Math.cos(angle), y: 50 + r * Math.sin(angle) };
-  });
-
-  // Market Scanner III — spec §8: "Scanner III makes the best-margin route glow."
   const scannerLvl = s.shipUpgrades.market_scanner ?? 0;
-  const route = scannerLvl >= 3 ? bestRoute(s) : null;
-  const routeGood = route ? goodById(route.goodId) : null;
+  const hint = scannerLvl >= 3 ? bestRoute(s) : null;
+  const hintGood = hint ? goodById(hint.goodId) : null;
 
-  function eventsFor(stationId: string) {
-    return s.activeEvents.filter((e) => e.stationId === stationId && e.expiresAt > t);
+  const plan = stops.length ? routeThrough(map, [s.currentStation, ...stops]) : null;
+
+  function nodeLabel(node: MapNode): string {
+    if (node.kind === 'station') {
+      const dressing = dressStationForSector(node.id, s.sector, s.runSeed ?? 0);
+      const st = STATIONS_BY_ID[node.id];
+      const locked = st && st.unlockRank > s.rank;
+      return `${dressing.name || node.name}${locked ? ` R${st.unlockRank}` : ''}`;
+    }
+    return node.name;
   }
 
-  function beginJump(stationId: string) {
-    const res = startJump(stationId);
-    if (!res.ok) return;
-    setSelected(null);
-    setTraveling(stationId);
+  function toggleStop(nodeId: string) {
+    if (traveling || nodeId === s.currentStation) return;
+    const st = STATIONS_BY_ID[nodeId];
+    if (st && st.unlockRank > s.rank) return;
+    setStops((prev) => (prev.includes(nodeId) ? prev.filter((x) => x !== nodeId) : [...prev, nodeId]));
+  }
+
+  function go() {
+    const current = plan;
+    if (!current || traveling) return;
+    const path = current.path;
     onHyperspace(true);
-    const dur = travelDurationMs(s);
-    timeoutRef.current = setTimeout(() => finish(stationId), dur);
+
+    const finish = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      hopDoneRef.current = null;
+      setTraveling(null);
+      setStops([]);
+      onHyperspace(false);
+      onArrive();
+    };
+
+    const runHop = (i: number) => {
+      if (i >= path.length) return finish();
+      const target = path[i];
+      const res = startJump(target);
+      if (!res.ok) return finish();
+      setTraveling(target);
+      const dur = travelDurationMs(getState()) * (res.lane?.trait === 'express' ? 0.5 : 1);
+      const complete = () => {
+        timeoutRef.current = null;
+        hopDoneRef.current = null;
+        completeJump(target, { finalStop: i === path.length - 1, laneTrait: res.lane?.trait });
+        if (getState().pendingEncounter) return finish(); // ambushed — route aborts here
+        runHop(i + 1);
+      };
+      hopDoneRef.current = complete;
+      timeoutRef.current = setTimeout(complete, dur);
+    };
+    runHop(1);
   }
 
-  function finish(stationId: string) {
+  function skipHop() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    completeJump(stationId);
-    setTraveling(null);
-    onHyperspace(false);
-    onArrive();
+    hopDoneRef.current?.();
   }
 
-  const selectedStation = selected ? STATIONS.find((x) => x.id === selected) : null;
-  const dest = s.sector + 1;
-  const gateReady = canEnterNextSector(s);
-  const toll = nextSectorToll(s);
+  const liveEvents = s.activeEvents.filter((e) => e.expiresAt > t);
 
   return (
     <>
@@ -69,36 +100,53 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
       </div>
 
       <div class="map-wrap">
-        <div class="map-ring">
-          {positioned.map(({ st, x, y }) => {
-            const locked = st.unlockRank > s.rank;
-            const evs = eventsFor(st.id);
-            const dressing = dressStationForSector(st.id, s.sector, s.runSeed ?? 0);
-            const isBestRoute = route?.stationId === st.id;
+        <div class="lane-map">
+          <svg class="lane-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {map.lanes.map((l) => {
+              const a = nodeById(map, l.a)!;
+              const b = nodeById(map, l.b)!;
+              return <line key={`${l.a}|${l.b}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} class={`lane ${l.trait}${l.fuel > 1 ? ' long' : ''}`} />;
+            })}
+          </svg>
+          {map.nodes.map((node) => {
+            const st = node.kind === 'station' ? STATIONS_BY_ID[node.id] : undefined;
+            const locked = !!st && st.unlockRank > s.rank;
+            const evs = liveEvents.filter((e) => e.stationId === node.id);
+            const stopIdx = stops.indexOf(node.id);
+            const isHint = hint?.stationId === node.id;
             return (
               <button
-                key={st.id}
-                class={`station-node${st.id === s.currentStation ? ' current' : ''}${locked ? ' locked' : ''}${isBestRoute ? ' best-route' : ''}`}
-                style={{ left: `${x}%`, top: `${y}%` }}
-                onClick={() => !locked && st.id !== s.currentStation && setSelected(st.id)}
+                key={node.id}
+                class={`station-node ${node.kind}${node.id === s.currentStation ? ' current' : ''}${locked ? ' locked' : ''}${stopIdx >= 0 ? ' queued' : ''}${isHint ? ' best-route' : ''}`}
+                style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                onClick={() => toggleStop(node.id)}
               >
                 {evs.length > 0 && <span class="node-event">{evs.length}📈</span>}
-                {isBestRoute && <span class="node-route">📡</span>}
-                <span>{st.icon}</span>
-                <span class="node-label">{dressing.name || st.name}{locked ? ` R${st.unlockRank}` : ''}</span>
+                {stopIdx >= 0 && <span class="node-stop">{stopIdx + 1}</span>}
+                {isHint && <span class="node-route">📡</span>}
+                <span>{node.icon}</span>
+                <span class="node-label">{nodeLabel(node)}</span>
               </button>
             );
           })}
-          <div class="gate-node" onClick={() => gateReady && payGateToll()}>
-            🌀
-            <div class="gate-toll">
-              {gateReady ? `SECTOR ${dest}\n${formatCredits(toll)}` : `Rank ${sectorUnlockRank(dest)}`}
-            </div>
-          </div>
         </div>
-        {route && routeGood && (
+
+        {plan && (
+          <div class="route-bar">
+            <span class="mono">
+              {plan.path.length - 1} hop{plan.path.length !== 2 ? 's' : ''} · {plan.fuel}⛽{plan.pirates > 0 ? ` · ${plan.pirates}☠` : ''}
+            </span>
+            <button class="btn btn-ghost" onClick={() => setStops([])}>CLEAR</button>
+            <button class="btn btn-primary" disabled={!!traveling || s.fuel < plan.fuel} onClick={go}>
+              {s.fuel < plan.fuel ? 'NOT ENOUGH FUEL' : 'GO'}
+            </button>
+          </div>
+        )}
+        {!plan && <div class="empty-hint" style={{ textAlign: 'center' }}>Tap nodes to plot a route — order matters.</div>}
+
+        {hint && hintGood && (
           <div class="route-hint">
-            📡 Best route: <b>{STATIONS.find((x) => x.id === route.stationId)?.name}</b> — {routeGood.icon} {routeGood.name} {formatPct(route.margin, { signed: true })}
+            📡 Best flip: <b>{STATIONS_BY_ID[hint.stationId]?.name}</b> — {hintGood.icon} {hintGood.name} {formatPct(hint.margin, { signed: true })}
           </div>
         )}
       </div>
@@ -106,18 +154,15 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
       <ContractsPanel />
 
       <div class="section-label">Active Signals</div>
-      {s.activeEvents.filter((e) => e.expiresAt > t).length === 0 && <div class="empty-hint">Nothing spiking right now. Fly and find out.</div>}
-      {s.activeEvents.filter((e) => e.expiresAt > t).map((e) => {
-        const st = STATIONS.find((x) => x.id === e.stationId);
+      {liveEvents.length === 0 && <div class="empty-hint">Nothing spiking right now. Fly and find out.</div>}
+      {liveEvents.map((e) => {
+        const st = STATIONS_BY_ID[e.stationId];
         const def = MARKET_EVENTS_BY_ID[e.kind];
         const good = e.goodId ? goodById(e.goodId) : null;
         const dressing = st ? dressStationForSector(st.id, s.sector, s.runSeed ?? 0) : null;
         const stationName = dressing?.name || st?.name || '?';
         const desc = def
-          ? def.copyTemplate
-              .replace('{station}', stationName)
-              .replace('{good}', good?.name ?? 'everything')
-              .replace('{mult}', e.multiplier.toFixed(1)) // templates already carry a literal × before {mult}
+          ? def.copyTemplate.replace('{station}', stationName).replace('{good}', good?.name ?? 'everything').replace('{mult}', e.multiplier.toFixed(1))
           : '';
         const direction = e.disables ? 'blocked' : e.multiplier >= 1 ? 'up' : 'down';
         return (
@@ -137,32 +182,13 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
           </div>
         );
       })}
-
     </div>
-    {/* Rendered as siblings of .screen, not nested inside it — see the same note in
-        MarketScreen.tsx. Nested here, both the confirm-jump sheet and the hyperspace
-        travel overlay (with its SKIP button) would anchor to .screen's scrolled content
-        and land off-screen whenever this list was scrolled down before opening them. */}
-    {selectedStation && (
-      <div class="sheet-backdrop" onClick={() => setSelected(null)}>
-        <div class="sheet" onClick={(e) => e.stopPropagation()}>
-          <div class="sheet-handle" />
-          <div class="sheet-title"><span>{selectedStation.icon}</span><span>Jump to {selectedStation.name}</span></div>
-          <div class="sheet-sub">{selectedStation.blurb}</div>
-          <div class="pl-line"><span>Fuel cost</span><span class="val mono">1 ⛽ ({Math.floor(s.fuel)} available)</span></div>
-          <div class="pl-line"><span>Travel time</span><span class="val mono">{(travelDurationMs(s) / 1000).toFixed(0)}s</span></div>
-          <button class="btn btn-block btn-primary" style={{ marginTop: 10 }} disabled={s.fuel < 1} onClick={() => beginJump(selectedStation.id)}>
-            {s.fuel < 1 ? 'OUT OF FUEL' : 'CONFIRM JUMP'}
-          </button>
-        </div>
-      </div>
-    )}
 
     {traveling && (
       <div class="hyperspace-overlay">
         <div style={{ fontSize: 40 }}>🌌</div>
-        <div class="hs-label">JUMPING TO {STATIONS.find((x) => x.id === traveling)?.name.toUpperCase()}…</div>
-        {canSkipTravel(s) && <button class="btn btn-ghost" onClick={() => finish(traveling)}>SKIP ▶</button>}
+        <div class="hs-label">JUMPING TO {nodeById(map, traveling)?.name.toUpperCase()}…</div>
+        {canSkipTravel(s) && <button class="btn btn-ghost" onClick={skipHop}>SKIP ▶</button>}
       </div>
     )}
     </>
