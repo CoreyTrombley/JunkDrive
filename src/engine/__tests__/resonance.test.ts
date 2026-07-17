@@ -78,4 +78,15 @@ describe('gate resonance', () => {
     expect(store.value.sector).toBe(12);
     expect(store.value.gateResonance).toBe(0); // reset on entry
   });
+
+  it('splitting a wash-trade sale cannot launder provenance', () => {
+    const s = createInitialState();
+    s.rank = 10;
+    s.cargo = { warp_cells: { qty: 20, avgCost: 1, srcStation: s.currentStation } };
+    store.value = s;
+    expect(sellGood('warp_cells', 1).ok).toBe(true);   // partial sell
+    expect(store.value.cargo['warp_cells'].srcStation).toBe(s.currentStation); // provenance survives
+    expect(sellGood('warp_cells', 19).ok).toBe(true);  // sell the rest, same station
+    expect(store.value.gateResonance).toBe(0);         // still a wash trade — zero charges
+  });
 });

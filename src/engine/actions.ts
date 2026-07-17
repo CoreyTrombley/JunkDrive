@@ -64,7 +64,7 @@ function dropCargoFraction(cargo: Record<string, CargoEntry>, pct: number): Reco
   const out: Record<string, CargoEntry> = {};
   for (const [gid, c] of Object.entries(cargo)) {
     const newQty = Math.floor(c.qty * (1 - pct));
-    if (newQty > 0) out[gid] = { qty: newQty, avgCost: c.avgCost };
+    if (newQty > 0) out[gid] = { ...c, qty: newQty };
   }
   return out;
 }
@@ -491,7 +491,7 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
     const remainingQty = entry.qty - sellQty;
     const newCargo = { ...s.cargo };
     if (remainingQty <= 0) delete newCargo[goodId];
-    else newCargo[goodId] = { qty: remainingQty, avgCost: entry.avgCost };
+    else newCargo[goodId] = { ...entry, qty: remainingQty };
 
     let st: GameState = {
       ...s,
