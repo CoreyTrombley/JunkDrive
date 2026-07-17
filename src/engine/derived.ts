@@ -1,17 +1,27 @@
 import type { GameState } from './state';
-import { BASE_HOLD, BASE_MAX_FUEL, BASE_FUEL_REGEN_SEC } from './state';
+import { BASE_HOLD_TONS, BASE_MAX_FUEL, BASE_FUEL_REGEN_SEC } from './state';
 import { STATIONS_BY_ID } from '../config/stations';
+import { goodById } from './pricing';
 
 export function maxHold(state: GameState): number {
   const cargoLevel = state.shipUpgrades['cargo_hold'] || 0;
   const relicLevel = state.relics['bigger_bones'] || 0;
-  return BASE_HOLD + cargoLevel * 3 + relicLevel * 4;
+  const gravLevel = state.shipUpgrades['graviton_frame'] || 0;
+  const relicTons = relicLevel > 0 ? 8 * Math.pow(2, relicLevel - 1) : 0;
+  return (BASE_HOLD_TONS + cargoLevel * 5 + relicTons) * (1 + 0.25 * gravLevel);
 }
 
+/** Tons currently carried. */
 export function usedHold(state: GameState): number {
-  let total = 0;
-  for (const key in state.cargo) total += state.cargo[key].qty;
-  return total;
+  let tons = 0;
+  for (const key in state.cargo) tons += state.cargo[key].qty * (goodById(key)?.mass ?? 1);
+  return tons;
+}
+
+/** Whole units of `goodId` that still fit in the hold (0 when over capacity). */
+export function freeCapacityUnits(state: GameState, goodId: string): number {
+  const mass = goodById(goodId)?.mass ?? 1;
+  return Math.max(0, Math.floor((maxHold(state) - usedHold(state)) / mass));
 }
 
 export function maxFuel(state: GameState): number {

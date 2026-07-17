@@ -7,7 +7,7 @@ import { mulberry32, hashSeed } from './rng';
 import type { QuestKind, QuestSize } from '../config/types';
 import { SCHEMA_VERSION } from './save';
 
-export const BASE_HOLD = 10;
+export const BASE_HOLD_TONS = 20;
 export const BASE_MAX_FUEL = 5;
 export const BASE_FUEL_REGEN_SEC = 75;
 export const STARTING_CREDITS = 500;

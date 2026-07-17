@@ -6,7 +6,7 @@ export const SHIP_UPGRADES: ShipUpgradeDef[] = [
     id: 'cargo_hold',
     name: 'Cargo Hold',
     icon: '📦',
-    effectLabel: (lvl) => `+${lvl * 3} hold (currently +${lvl * 3})`,
+    effectLabel: (lvl) => `+${lvl * 5}t hold (currently +${lvl * 5}t)`,
     baseCost: 800,
     costGrowth: 1.65,
     maxLevel: null,
@@ -54,6 +54,15 @@ export const SHIP_UPGRADES: ShipUpgradeDef[] = [
     baseCost: 25_000,
     costGrowth: 4,
     maxLevel: 3,
+  },
+  {
+    id: 'graviton_frame',
+    name: 'Graviton Frame',
+    icon: '⚖️',
+    effectLabel: (lvl) => `Hold ×${(1 + 0.25 * lvl).toFixed(2)} (compresses cargo mass)`,
+    baseCost: 250_000,
+    costGrowth: 5,
+    maxLevel: 5,
   },
 ];
 

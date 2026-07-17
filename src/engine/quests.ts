@@ -4,7 +4,7 @@ import { templatesForSize, QUEST_XP_BY_SIZE, QUEST_CREDIT_PCT_BY_SIZE } from '..
 import { GOODS } from '../config/goods';
 import { STATIONS } from '../config/stations';
 import { type RngFn, randInt, randRange, pick, chance } from './rng';
-import { netWorth } from './derived';
+import { netWorth, maxHold } from './derived';
 import { allUnlockedGoods } from './pricing';
 
 function fillLabel(tpl: string, params: Record<string, string | number>): string {
@@ -26,11 +26,15 @@ export function generateQuest(size: QuestSize, state: GameState, rng: RngFn, seq
   let stationId: string | undefined;
 
   switch (tpl.kind) {
-    case 'flip_units':
-      goal = randInt(rng, 5, 16);
+    case 'flip_units': {
+      // Tonnage-aware: keep tiny quests tiny for heavy goods (≈ ≤2 full holds).
+      const unitsPerHold = Math.max(1, Math.floor(maxHold(state) / good.mass));
+      const cap = Math.max(3, Math.min(16, unitsPerHold * 2));
+      goal = randInt(rng, Math.min(5, cap), cap);
       goodId = good.id;
       label = fillLabel(tpl.label, { n: goal, good: good.name });
       break;
+    }
     case 'visit_station':
       stationId = station.id;
       label = fillLabel(tpl.label, { station: station.name });

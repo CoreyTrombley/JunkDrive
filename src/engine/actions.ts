@@ -28,7 +28,7 @@ import {
   rigTapPayout,
 } from './formulas';
 import {
-  maxHold, usedHold, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
+  maxHold, usedHold, freeCapacityUnits, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
   goldenRolodexActive, eventMagnetActive, tollDiscount,
 } from './derived';
 import { mulberry32, randRange, randInt, chance, pickWeighted, pick, shuffle, type RngFn } from './rng';
@@ -384,8 +384,7 @@ export function buyGood(goodId: string, qty: number): { ok: boolean; reason?: st
   const station = STATIONS_BY_ID[state.currentStation];
   if (station && good.tier < station.minGoodTier) return { ok: false, reason: 'Not stocked here.' };
   if (isTradeDisabled(state.activeEvents, state.currentStation, goodId, now())) return { ok: false, reason: 'Embargoed here right now.' };
-  const free = maxHold(state) - usedHold(state);
-  const buyQty = Math.min(qty, free);
+  const buyQty = Math.min(qty, freeCapacityUnits(state, goodId));
   if (buyQty <= 0) return { ok: false, reason: 'Cargo hold full.' };
   const price = getPrice(state, state.currentStation, goodId);
   const cost = price * buyQty;
@@ -564,7 +563,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
       const unlocked = allUnlockedGoods(st);
       if (unlocked.length) {
         const good = pick(sessionRng, unlocked);
-        const qty = Math.min(randInt(sessionRng, 1, 3), maxHold(st) - usedHold(st));
+        const qty = Math.min(randInt(sessionRng, 1, 3), freeCapacityUnits(st, good.id));
         if (qty > 0) {
           st = { ...st, cargo: addCargo(st.cargo, good.id, qty, 0) };
           setToast({ text: `Found ${qty}× ${good.name} floating by. Finders keepers.`, icon: good.icon });
@@ -591,13 +590,15 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
       emit({ type: 'haptic', pattern: 'jackpot' });
       emit({ type: 'confetti', power: 'big' });
       if (jackpotId === 'motherlode') {
-        const free = maxHold(st) - usedHold(st);
-        if (free > 0) {
-          const bestTier = bestUnlockedTier(st.rank);
-          const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 5);
-          const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
-          st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0) };
-        }
+        const bestTier = bestUnlockedTier(st.rank);
+        const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 5);
+        const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
+        // Windfall budget: up to half the hold's tonnage in this good, at least 3
+        // units when space exists, never more than 60 — keeps the jackpot's value
+        // roughly mass-independent instead of scaling with 1/mass.
+        const budgetUnits = Math.max(3, Math.floor((maxHold(st) * 0.5) / good.mass));
+        const free = Math.min(freeCapacityUnits(st, good.id), budgetUnits, 60);
+        if (free > 0) st = { ...st, cargo: addCargo(st.cargo, good.id, free, 0) };
       } else if (jackpotId === 'golden_buyer') {
         const ev: ActiveMarketEvent = {
           id: `golden-${t}`, kind: 'golden_buyer', stationId: st.currentStation, goodId: null,
@@ -700,10 +701,10 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           if (success) {
             const minQ = Number(choice.params?.gainMinQty ?? 2);
             const maxQ = Number(choice.params?.gainMaxQty ?? 6);
-            const qty = Math.min(randInt(sessionRng, minQ, maxQ), maxHold(st) - usedHold(st));
             const bestTier = bestUnlockedTier(st.rank);
             const pool = GOODS.filter((g) => g.tier <= bestTier + 1 && g.unlockRank <= st.rank + 3);
             const good = pool.length ? pick(sessionRng, pool) : GOODS[0];
+            const qty = Math.min(randInt(sessionRng, minQ, maxQ), freeCapacityUnits(st, good.id));
             st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
             resultText = qty > 0 ? `Salvaged ${qty}× ${good.name}. Free loot.` : 'Hold was full — grabbed nothing.';
             outcome = 'good';
@@ -730,7 +731,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
           const price = getPrice(st, st.currentStation, good.id);
           const pct = randRange(sessionRng, minPct, maxPct);
           const dealPrice = price * pct;
-          const qty = Math.min(randInt(sessionRng, 3, 10), maxHold(st) - usedHold(st));
+          const qty = Math.min(randInt(sessionRng, 3, 10), freeCapacityUnits(st, good.id));
           const cost = dealPrice * qty;
           const isGoodDeal = chance(sessionRng, goodOdds) || rolodex;
           if (qty > 0 && st.credits >= cost && isGoodDeal) {
@@ -780,7 +781,7 @@ export function resolveEncounter(choiceId: string): { ok: boolean; text: string 
             } else if (roll < 0.75) {
               const unlocked = allUnlockedGoods(st);
               const good = unlocked.length ? pick(sessionRng, unlocked) : GOODS[0];
-              const qty = Math.min(randInt(sessionRng, 2, 5), maxHold(st) - usedHold(st));
+              const qty = Math.min(randInt(sessionRng, 2, 5), freeCapacityUnits(st, good.id));
               st = { ...st, cargo: addCargo(st.cargo, good.id, Math.max(0, qty), 0) };
               resultText = `They gave you ${qty}× ${good.name} in thanks.`;
               outcome = 'good';

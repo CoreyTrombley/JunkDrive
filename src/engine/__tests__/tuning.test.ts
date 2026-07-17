@@ -5,10 +5,10 @@ import { MARKET_EVENTS_BY_ID } from '../../config/events';
 import { SHIP_UPGRADES_BY_ID, upgradeCost } from '../../config/ship';
 
 describe('trading tuning constants', () => {
-  it('cargo hold gives +3 per level', () => {
+  it('cargo hold gives +5t per level', () => {
     const s = createInitialState();
     s.shipUpgrades['cargo_hold'] = 4;
-    expect(maxHold(s)).toBe(10 + 4 * 3);
+    expect(maxHold(s)).toBe(20 + 4 * 5);
   });
 
   it('cargo hold cost growth is 1.65', () => {
