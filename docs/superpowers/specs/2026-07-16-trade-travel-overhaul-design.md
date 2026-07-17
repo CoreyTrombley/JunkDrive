@@ -35,7 +35,7 @@ manifest play stay inside the bands.
   [6, 3.75, 1.5, 0.6] × rand(0.7, 1.3), rolled with the good (seeded, id-stable).
 - `maxHold` becomes **tons**: base 20t + cargo_hold ×5t/level (cost 800 × 1.65^lvl, unchanged
   curve) — all multiplied by a new late-game upgrade **Graviton Frame**: ×(1 + 0.25·level),
-  max 5, cost 250,000 × 5^lvl. `bigger_bones` relic becomes +8t × 2^level.
+  max 5, cost 250,000 × 5^lvl. `bigger_bones` relic becomes +8t × 2^(level−1) — +8t at level 1, doubling each level.
 - `usedHold` = Σ qty × mass. Trade sheet caps qty by `floor(freeTons / mass)`; HUD/ship screens
   show `12.4t / 20t`.
 - Save migration: none needed — over-capacity legacy cargo is never dropped; it just blocks new
