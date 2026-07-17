@@ -52,5 +52,7 @@ export function importSaveCode(code: string): GameState {
   if (typeof (parsed as Record<string, unknown>).manifestSeq !== 'number') (parsed as Record<string, unknown>).manifestSeq = 1;
   if (typeof (parsed as Record<string, unknown>).lastSalvageAt !== 'object' || (parsed as Record<string, unknown>).lastSalvageAt === null) (parsed as Record<string, unknown>).lastSalvageAt = {};
   if (!Array.isArray((parsed as Record<string, unknown>).visitedBeacons)) (parsed as Record<string, unknown>).visitedBeacons = [];
+  if (typeof (parsed as Record<string, unknown>).gateResonance !== 'number') (parsed as Record<string, unknown>).gateResonance = 0;
+  if (typeof (parsed as Record<string, unknown>).pendingRimClamp !== 'boolean') (parsed as Record<string, unknown>).pendingRimClamp = false;
   return parsed as GameState;
 }

@@ -18,6 +18,8 @@ export const STARTING_STATION = 'rust_harbor';
 export interface CargoEntry {
   qty: number;
   avgCost: number;
+  /** Node the good was last bought/looted at (most-recent-acquisition-wins). Optional — legacy saves lack it. */
+  srcStation?: string;
 }
 
 export interface RigState {
@@ -150,6 +152,12 @@ export interface GameState {
   lastSalvageAt: Record<string, number>;
   visitedBeacons: string[];
 
+  /** Gate Resonance charges toward the NEXT sector's gate; earned in-sector, resets on entry. */
+  gateResonance: number;
+
+  /** One-shot flag: a >S99 legacy save was clamped on load; App shows the monument moment once. */
+  pendingRimClamp: boolean;
+
   settings: Settings;
   onboarding: { step: number; complete: boolean; skipped: boolean };
   stats: {
@@ -237,6 +245,9 @@ export function createInitialState(): GameState {
 
     lastSalvageAt: {},
     visitedBeacons: [],
+
+    gateResonance: 0,
+    pendingRimClamp: false,
 
     settings: {
       chillMode: false,

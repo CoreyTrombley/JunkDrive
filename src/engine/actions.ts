@@ -26,7 +26,7 @@ import {
   rigUnitCost, rigBatchCost, maxAffordableRigQty, milestoneMultiplier,
   codexBonusMult, globalIncomeMult, totalYardRatePerSec, gateToll,
   sectorUnlockRank, darkMatterFromLifetime, offlineCapMs, luckyFlipChance,
-  rigTapPayout,
+  rigTapPayout, resonanceNeeded, RESONANCE_FLIP_FLOOR, SECTOR_CAP,
 } from './formulas';
 import {
   maxHold, usedHold, freeCapacityUnits, maxFuel, fuelRegenSec, scanChanceFor, netWorth,
@@ -52,12 +52,12 @@ const BOOST_DURATION_MS = 10 * 60_000;
 // Small helpers
 // ---------------------------------------------------------------------------
 
-function addCargo(cargo: Record<string, CargoEntry>, goodId: string, qty: number, atCost: number): Record<string, CargoEntry> {
+function addCargo(cargo: Record<string, CargoEntry>, goodId: string, qty: number, atCost: number, srcStation?: string): Record<string, CargoEntry> {
   if (qty <= 0) return cargo;
   const existing = cargo[goodId] || { qty: 0, avgCost: 0 };
   const newQty = existing.qty + qty;
   const newAvg = newQty > 0 ? (existing.qty * existing.avgCost + qty * atCost) / newQty : 0;
-  return { ...cargo, [goodId]: { qty: newQty, avgCost: newAvg } };
+  return { ...cargo, [goodId]: { qty: newQty, avgCost: newAvg, srcStation: srcStation ?? existing.srcStation } };
 }
 
 function dropCargoFraction(cargo: Record<string, CargoEntry>, pct: number): Record<string, CargoEntry> {
@@ -168,6 +168,8 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
     lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
     visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
+    gateResonance: (loaded as Partial<GameState>).gateResonance ?? 0,
+    pendingRimClamp: (loaded as Partial<GameState>).pendingRimClamp ?? false,
   };
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
@@ -255,6 +257,8 @@ export function importSave(code: string): { ok: boolean; reason?: string } {
       manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
       lastSalvageAt: (loaded as Partial<GameState>).lastSalvageAt ?? {},
       visitedBeacons: (loaded as Partial<GameState>).visitedBeacons ?? [],
+      gateResonance: loaded.gateResonance ?? 0,
+      pendingRimClamp: loaded.pendingRimClamp ?? false,
     };
     store.value = merged;
     writeSave(merged);
@@ -429,7 +433,7 @@ export function buyGood(goodId: string, qty: number): { ok: boolean; reason?: st
     let st: GameState = {
       ...s,
       credits: s.credits - cost,
-      cargo: addCargo(s.cargo, goodId, buyQty, price),
+      cargo: addCargo(s.cargo, goodId, buyQty, price, s.currentStation),
       stats: {
         ...s.stats,
         creditsSpent: s.stats.creditsSpent + cost,
@@ -494,6 +498,10 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
       },
     };
     st = stampCodex(st, 'goods', goodId);
+    if (profit / sectorScale(s.sector) >= RESONANCE_FLIP_FLOOR && entry.srcStation !== s.currentStation) {
+      st = { ...st, gateResonance: st.gateResonance + 1 };
+      if (s.sector < SECTOR_CAP && resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+1 ⚡', kind: 'info' });
+    }
     st = applyXpAndRankUps(st);
     st = progressQuests(st, (q) => {
       if (q.kind === 'flip_units' && (!q.goodId || q.goodId === goodId)) return { ...q, progress: Math.min(q.goal, q.progress + sellQty) };
@@ -545,6 +553,11 @@ export function deliverManifest(manifestId: string): { ok: boolean; reason?: str
       stats: { ...s.stats, totalSales: s.stats.totalSales + 1, creditsEarned: s.stats.creditsEarned + m.rewardCredits },
       bests: { ...s.bests, biggestSale: Math.max(s.bests.biggestSale, m.rewardCredits) },
     };
+    const itemsMoved = m.items.every((it) => s.cargo[it.goodId]?.srcStation !== m.stationId);
+    if (itemsMoved) {
+      st = { ...st, gateResonance: st.gateResonance + 3 };
+      if (s.sector < SECTOR_CAP && resonanceNeeded(s.sector + 1) > 0) emit({ type: 'floater', text: '+3 ⚡', kind: 'info' });
+    }
     st = applyXpAndRankUps(st);
     st = progressQuests(st, (q) => (q.kind === 'deliver_manifest' ? { ...q, progress: q.goal } : q));
     st = maintainManifests(st, t);
@@ -1251,6 +1264,10 @@ export function payGateToll(): { ok: boolean; reason?: string } {
   if (!canEnterNextSector(state)) return { ok: false, reason: `Unlocks at Rank ${sectorUnlockRank(dest)}.` };
   const map = generateSectorMap(state.sector, state.runSeed ?? 0);
   if (nodeById(map, state.currentStation)?.kind !== 'gate') return { ok: false, reason: 'Dock at the Sector Gate first.' };
+  const need = resonanceNeeded(dest);
+  if (state.gateResonance < need) {
+    return { ok: false, reason: `Gate uncharged — ${need - state.gateResonance} more resonance.` };
+  }
   const toll = nextSectorToll(state);
   if (state.credits < toll) return { ok: false, reason: 'Not enough credits.' };
   setState((s) => {
@@ -1261,6 +1278,7 @@ export function payGateToll(): { ok: boolean; reason?: string } {
       ...s,
       credits: s.credits - toll,
       sector: dest,
+      gateResonance: 0,
       currentStation: 'rust_harbor',
       maxSectorReached: Math.max(s.maxSectorReached, dest),
       waves,
@@ -1306,8 +1324,9 @@ export function claimSalvage(): { ok: boolean; reason?: string } {
   if (qty <= 0) return { ok: false, reason: 'Hold is full.' };
   setState((s) => ({
     ...s,
-    cargo: addCargo(s.cargo, good.id, qty, 0),
+    cargo: addCargo(s.cargo, good.id, qty, 0, s.currentStation),
     lastSalvageAt: { ...s.lastSalvageAt, [s.currentStation]: t },
+    gateResonance: s.gateResonance + 1,
   }));
   emit({ type: 'sfx', id: 'salvage' });
   emit({ type: 'toast', text: `Hauled in ${qty}× ${good.name}.`, icon: good.icon });
