@@ -1,6 +1,6 @@
 // JUNKRUN service worker — precaches the app shell for instant offline open.
 // Spec §15.2. Cache-first with network fallback + background revalidation.
-const CACHE_NAME = 'junkrun-v2';
+const CACHE_NAME = 'junkrun-v3';
 // Relative to this script's own location, not root-absolute — if this is hosted from a
 // subdirectory, absolute paths like '/index.html' would 404 against the domain root and
 // fail the whole cache.addAll() call, which fails the service worker's install step entirely.
