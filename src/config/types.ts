@@ -128,7 +128,8 @@ export type QuestKind =
   | 'claim_offline'
   | 'lucky_flip'
   | 'codex_set'
-  | 'jump_n';
+  | 'jump_n'
+  | 'deliver_manifest';
 
 export type QuestSize = 'tiny' | 'medium' | 'session';
 

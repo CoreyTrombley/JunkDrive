@@ -34,6 +34,7 @@ import {
 } from './derived';
 import { mulberry32, randRange, randInt, chance, pickWeighted, pick, shuffle, type RngFn } from './rng';
 import { generateQuest, generateFullRail } from './quests';
+import { generateManifest, canDeliver, MANIFEST_SLOTS, type Manifest } from './manifests';
 import { generateSectorGoods } from './sectorgen';
 import { loadSave, writeSave, exportSaveCode, importSaveCode } from './save';
 import { now } from './time';
@@ -162,6 +163,8 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     stats: { ...fresh.stats, ...loaded.stats },
     runSeed: typeof loaded.runSeed === 'number' ? loaded.runSeed : 0,
     stocks: (loaded as Partial<GameState>).stocks ?? {},
+    manifests: (loaded as Partial<GameState>).manifests ?? [],
+    manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
   };
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
@@ -194,6 +197,7 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
 
   const offlineReport = elapsed > 30_000 ? { amount: earned, elapsedMs: elapsed, capped: elapsed > cap } : null;
   state = { ...state, pendingOfflineReport: offlineReport, lastSeen: t };
+  state = maintainManifests(state, t);
 
   store.value = state;
   return { offlineReport };
@@ -244,6 +248,8 @@ export function importSave(code: string): { ok: boolean; reason?: string } {
       settings: { ...fresh.settings, ...loaded.settings },
       stats: { ...fresh.stats, ...loaded.stats },
       stocks: loaded.stocks ?? {},
+      manifests: (loaded as Partial<GameState>).manifests ?? [],
+      manifestSeq: (loaded as Partial<GameState>).manifestSeq ?? 1,
     };
     store.value = merged;
     writeSave(merged);
@@ -320,6 +326,21 @@ function expireTimers(state: GameState, t: number): GameState {
   return st;
 }
 
+function maintainManifests(state: GameState, t: number): GameState {
+  const live = state.manifests.filter((m) => m.expiresAt > t);
+  if (live.length >= MANIFEST_SLOTS) return live.length === state.manifests.length ? state : { ...state, manifests: live };
+  let st: GameState = { ...state, manifests: live };
+  const added: Manifest[] = [];
+  let seq = st.manifestSeq;
+  while (live.length + added.length < MANIFEST_SLOTS) {
+    added.push(generateManifest(st, sessionRng, seq, t));
+    seq++;
+  }
+  st = { ...st, manifests: [...live, ...added], manifestSeq: seq };
+  if (added.length && state.manifests.length > 0) emit({ type: 'sfx', id: 'quest_claim' }); // Task 9 swaps this to 'manifest_new'
+  return st;
+}
+
 export function tick(): void {
   const t = now();
   setState((s) => {
@@ -337,6 +358,7 @@ export function tick(): void {
     state = processMarketPulses(state, t);
     state = maybeSpawnAmbientEvent(state, t);
     state = expireTimers(state, t);
+    state = maintainManifests(state, t);
     state = { ...state, lastSeen: t };
     return state;
   });
@@ -489,6 +511,44 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
   if (newStreakCount >= 2) emit({ type: 'sfx', id: 'streak_up', data: newStreakCount });
 
   return { ok: true, profit, isCrit, qty: sellQty };
+}
+
+export function deliverManifest(manifestId: string): { ok: boolean; reason?: string; credits?: number } {
+  const state = getState();
+  const m = state.manifests.find((x) => x.id === manifestId);
+  if (!m) return { ok: false, reason: 'Contract expired.' };
+  if (state.currentStation !== m.stationId) return { ok: false, reason: 'Deliver at the named station.' };
+  if (!canDeliver(state, m)) return { ok: false, reason: 'Cargo incomplete.' };
+  const t = now();
+  setState((s) => {
+    const cargo = { ...s.cargo };
+    for (const it of m.items) {
+      const entry = cargo[it.goodId];
+      const remaining = entry.qty - it.qty;
+      if (remaining <= 0) delete cargo[it.goodId];
+      else cargo[it.goodId] = { ...entry, qty: remaining };
+    }
+    let st: GameState = {
+      ...s,
+      cargo,
+      credits: s.credits + m.rewardCredits,
+      lifetimeEarnings: s.lifetimeEarnings + m.rewardCredits,
+      xp: s.xp + m.rewardXp,
+      manifests: s.manifests.filter((x) => x.id !== m.id),
+      stats: { ...s.stats, totalSales: s.stats.totalSales + 1, creditsEarned: s.stats.creditsEarned + m.rewardCredits },
+      bests: { ...s.bests, biggestSale: Math.max(s.bests.biggestSale, m.rewardCredits) },
+    };
+    st = applyXpAndRankUps(st);
+    st = progressQuests(st, (q) => (q.kind === 'deliver_manifest' ? { ...q, progress: q.goal } : q));
+    st = maintainManifests(st, t);
+    st = checkMilestones(st);
+    return st;
+  });
+  emit({ type: 'sfx', id: 'quest_claim' }); // Task 9 upgrades this to 'manifest_deliver'
+  emit({ type: 'haptic', pattern: 'sell' });
+  emit({ type: 'confetti', power: 'small' });
+  emit({ type: 'floater', text: formatSignedCredits(m.rewardCredits), kind: 'profit' });
+  return { ok: true, credits: m.rewardCredits };
 }
 
 // ---------------------------------------------------------------------------

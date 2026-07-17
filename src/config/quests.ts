@@ -19,6 +19,7 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
   { kind: 'hire_manager', size: 'session', label: 'Hire a rig manager' },
   { kind: 'claim_offline', size: 'session', label: 'Claim offline earnings' },
   { kind: 'codex_set', size: 'session', label: 'Complete a Codex set' },
+  { kind: 'deliver_manifest', size: 'session', label: 'Deliver a trade manifest' },
 ];
 
 export function templatesForSize(size: QuestSize): QuestTemplate[] {

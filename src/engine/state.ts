@@ -7,6 +7,7 @@ import { mulberry32, hashSeed } from './rng';
 import type { QuestKind, QuestSize } from '../config/types';
 import { SCHEMA_VERSION } from './save';
 import type { MarketSort, MarketFilters } from './marketview';
+import type { Manifest } from './manifests';
 
 export const BASE_HOLD_TONS = 20;
 export const BASE_MAX_FUEL = 5;
@@ -143,6 +144,9 @@ export interface GameState {
   /** Sparse per-station stock levels; missing entry = baseline (see engine/stocks.ts). */
   stocks: Record<string, Record<string, number>>;
 
+  manifests: Manifest[];
+  manifestSeq: number;
+
   settings: Settings;
   onboarding: { step: number; complete: boolean; skipped: boolean };
   stats: {
@@ -224,6 +228,9 @@ export function createInitialState(): GameState {
     extraSectorGoods: {},
 
     stocks: {},
+
+    manifests: [],
+    manifestSeq: 1,
 
     settings: {
       chillMode: false,
