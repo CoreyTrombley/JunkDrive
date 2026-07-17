@@ -7,7 +7,8 @@ export type SfxId =
   | 'rank_up' | 'quest_claim' | 'jump' | 'arrival' | 'event_card'
   | 'jackpot' | 'coin_cascade' | 'cant_afford' | 'wormhole' | 'toll'
   | 'upgrade' | 'manager_hire' | 'milestone' | 'daily_claim' | 'boost'
-  | 'encounter_good' | 'encounter_bad' | 'manifest_new' | 'manifest_deliver';
+  | 'encounter_good' | 'encounter_bad' | 'manifest_new' | 'manifest_deliver'
+  | 'refuel' | 'salvage' | 'express';
 
 export type HapticId = 'tap' | 'sell' | 'rank_up' | 'jackpot' | 'error';
 

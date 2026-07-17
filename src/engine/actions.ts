@@ -574,6 +574,7 @@ export function startJump(targetNodeId: string): { ok: boolean; reason?: string;
   if (state.fuel < lane.fuel) return { ok: false, reason: 'Out of fuel.' };
   setState((s) => ({ ...s, fuel: s.fuel - lane.fuel }));
   emit({ type: 'sfx', id: 'jump' });
+  if (lane.trait === 'express') emit({ type: 'sfx', id: 'express' });
   emit({ type: 'haptic', pattern: 'tap' });
   return { ok: true, lane };
 }
@@ -1276,7 +1277,7 @@ export function buyFuelPip(): { ok: boolean; reason?: string } {
   const cost = Math.max(50, netWorth(state) * 0.02);
   if (state.credits < cost) return { ok: false, reason: 'Not enough credits.' };
   setState((s) => ({ ...s, credits: s.credits - cost, fuel: Math.min(maxFuel(s), s.fuel + 1) }));
-  emit({ type: 'sfx', id: 'buy' }); // Task 14 swaps this to 'refuel'
+  emit({ type: 'sfx', id: 'refuel' });
   emit({ type: 'floater', text: formatSignedCredits(-cost), kind: 'info' });
   return { ok: true };
 }
@@ -1298,7 +1299,7 @@ export function claimSalvage(): { ok: boolean; reason?: string } {
     cargo: addCargo(s.cargo, good.id, qty, 0),
     lastSalvageAt: { ...s.lastSalvageAt, [s.currentStation]: t },
   }));
-  emit({ type: 'sfx', id: 'buy' }); // Task 14 swaps this to 'salvage'
+  emit({ type: 'sfx', id: 'salvage' });
   emit({ type: 'toast', text: `Hauled in ${qty}× ${good.name}.`, icon: good.icon });
   return { ok: true };
 }

@@ -405,6 +405,18 @@ class Synth {
         [392, 523.25, 659.25, 783.99].forEach((f, i) => this.tone(f, 0.12, { type: 'triangle', gain: 0.18, delay: i * 0.07 }));
         this.noise(0.25, { gain: 0.08, filterType: 'highpass', filterFreq: 6000, delay: 0.2 });
         break;
+      case 'refuel':
+        this.tone(180, 0.25, { type: 'triangle', startFreq: 90, gain: 0.18 });
+        this.noise(0.2, { gain: 0.06, filterType: 'lowpass', filterFreq: 900, delay: 0.05 });
+        break;
+      case 'salvage':
+        this.tone(140, 0.08, { type: 'square', gain: 0.16 });
+        this.tone(1046.5, 0.1, { gain: 0.14, delay: 0.1 });
+        this.tone(1318.5, 0.1, { gain: 0.12, delay: 0.17 });
+        break;
+      case 'express':
+        this.noise(0.5, { gain: 0.14, filterType: 'bandpass', filterFreq: 600, filterFreqEnd: 6000, filterQ: 1.2 });
+        break;
     }
   }
 
