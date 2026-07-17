@@ -69,6 +69,7 @@ export function MarketScreen() {
           <button
             key={key}
             class={`mc-chip${s.settings.marketFilters[key] ? ' on' : ''}`}
+            aria-pressed={s.settings.marketFilters[key]}
             onClick={() => updateSettings({ marketFilters: { ...s.settings.marketFilters, [key]: !s.settings.marketFilters[key] } })}
           >
             {label}
@@ -76,6 +77,7 @@ export function MarketScreen() {
         ))}
         <button
           class={`mc-chip${s.settings.marketFilters.tier !== null ? ' on' : ''}`}
+          aria-pressed={s.settings.marketFilters.tier !== null}
           onClick={() => {
             const cur = s.settings.marketFilters.tier;
             const next = cur === null ? 1 : cur >= 6 ? null : cur + 1;

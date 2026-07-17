@@ -16,7 +16,7 @@ function neighbors(map: SectorMap, id: string): Array<{ id: string; lane: MapLan
   return out;
 }
 
-export function shortestPath(map: SectorMap, from: string, to: string): RoutePlan | null {
+export function shortestPath(map: SectorMap, from: string, to: string, blocked?: Set<string>): RoutePlan | null {
   const ids = map.nodes.map((n) => n.id);
   if (!ids.includes(from) || !ids.includes(to)) return null;
   const fuel = new Map<string, number>(ids.map((i) => [i, Infinity]));
@@ -38,6 +38,7 @@ export function shortestPath(map: SectorMap, from: string, to: string): RoutePla
     if (cur === to) break;
     for (const { id: nb, lane } of neighbors(map, cur)) {
       if (done.has(nb)) continue;
+      if (blocked?.has(nb) && nb !== to) continue;
       const nf = fuel.get(cur)! + lane.fuel;
       const nh = hops.get(cur)! + 1;
       if (nf < fuel.get(nb)! || (nf === fuel.get(nb)! && nh < hops.get(nb)!)) {
@@ -62,11 +63,11 @@ export function shortestPath(map: SectorMap, from: string, to: string): RoutePla
   return { path, fuel: fuel.get(to)!, pirates };
 }
 
-export function routeThrough(map: SectorMap, stops: string[]): RoutePlan | null {
+export function routeThrough(map: SectorMap, stops: string[], blocked?: Set<string>): RoutePlan | null {
   if (stops.length < 2) return stops.length === 1 ? { path: [stops[0]], fuel: 0, pirates: 0 } : null;
   const total: RoutePlan = { path: [stops[0]], fuel: 0, pirates: 0 };
   for (let i = 1; i < stops.length; i++) {
-    const leg = shortestPath(map, stops[i - 1], stops[i]);
+    const leg = shortestPath(map, stops[i - 1], stops[i], blocked);
     if (!leg) return null;
     total.path.push(...leg.path.slice(1));
     total.fuel += leg.fuel;

@@ -37,7 +37,7 @@ import { generateQuest, generateFullRail } from './quests';
 import { generateManifest, canDeliver, MANIFEST_SLOTS, type Manifest } from './manifests';
 import { generateSectorGoods, stationDisplayName } from './sectorgen';
 import { loadSave, writeSave, exportSaveCode, importSaveCode } from './save';
-import { generateSectorMap, laneBetween, nodeById, GATE_NODE_ID, type MapLane } from './mapgen';
+import { generateSectorMap, laneBetween, nodeById, GATE_NODE_ID, WAYPOINT_THEME, type MapLane } from './mapgen';
 import { now } from './time';
 import { formatSignedCredits } from './num';
 import { maybeOfferInstall } from './installPrompt';
@@ -294,7 +294,7 @@ function regenFuelState(state: GameState, t: number): GameState {
   return { ...state, fuel: newFuel, lastFuelUpdateAt: t };
 }
 
-function processMarketPulses(state: GameState, t: number): GameState {
+function processMarketPulses(state: GameState, t: number, opts: { skipStockRegen?: boolean } = {}): GameState {
   const elapsed = t - state.lastMarketPulseAt;
   if (elapsed < PULSE_INTERVAL_MS) return state;
   const pulses = Math.floor(elapsed / PULSE_INTERVAL_MS);
@@ -306,7 +306,8 @@ function processMarketPulses(state: GameState, t: number): GameState {
     fastForwardWave(w, good.volatility, pulses, sessionRng);
     waves[goodId] = w;
   }
-  state = regenStocks({ ...state, waves, lastMarketPulseAt: state.lastMarketPulseAt + pulses * PULSE_INTERVAL_MS }, pulses);
+  state = { ...state, waves, lastMarketPulseAt: state.lastMarketPulseAt + pulses * PULSE_INTERVAL_MS };
+  if (!opts.skipStockRegen) state = regenStocks(state, pulses);
   return state;
 }
 
@@ -707,7 +708,9 @@ export function completeJump(
     const isStation = node?.kind === 'station';
     let state: GameState = { ...s, currentStation: targetNodeId, stats: { ...s.stats, totalJumps: s.stats.totalJumps + 1 } };
     if (isStation) state = stampCodex(state, 'stations', targetNodeId);
-    state = processMarketPulses({ ...state, lastMarketPulseAt: state.lastMarketPulseAt - PULSE_INTERVAL_MS }, t);
+    // Real-time pulses (tick/bootGame) do stock regen; this arrival-forced pulse
+    // only fast-forwards waves so hopping doesn't heal perturbed stocks for free.
+    state = processMarketPulses({ ...state, lastMarketPulseAt: state.lastMarketPulseAt - PULSE_INTERVAL_MS }, t, { skipStockRegen: true });
 
     const pirateAmbush = opts.laneTrait === 'pirate' && chance(sessionRng, 0.3);
     if (pirateAmbush) {
@@ -735,7 +738,7 @@ export function completeJump(
     });
     return state;
   });
-  emit({ type: 'sfx', id: 'arrival', stationMotif: STATIONS_BY_ID[targetNodeId]?.theme.motif });
+  emit({ type: 'sfx', id: 'arrival', stationMotif: STATIONS_BY_ID[targetNodeId]?.theme.motif ?? WAYPOINT_THEME.motif });
   return { roll: rolled };
 }
 
@@ -1267,6 +1270,12 @@ export function payGateToll(): { ok: boolean; reason?: string } {
   emit({ type: 'confetti', power: 'big' });
   emit({ type: 'toast', text: `SECTOR ${dest} — everything's about to get expensive.`, icon: '🌌' });
   return { ok: true };
+}
+
+/** Refund lane fuel for a hop cancelled before arrival (Map unmounted mid-travel). */
+export function refundFuel(pips: number): void {
+  if (pips <= 0) return;
+  setState((s) => ({ ...s, fuel: Math.min(maxFuel(s), s.fuel + pips) }));
 }
 
 export function buyFuelPip(): { ok: boolean; reason?: string } {

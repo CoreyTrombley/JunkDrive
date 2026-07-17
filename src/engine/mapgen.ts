@@ -129,23 +129,42 @@ export function generateSectorMap(sector: number, runSeed: number): SectorMap {
     for (const o of nearest) addLane(n, o);
   }
 
-  // union-find connectivity repair
-  const parent = new Map<string, string>(nodes.map((n) => [n.id, n.id]));
-  const find = (x: string): string => (parent.get(x) === x ? x : (parent.set(x, find(parent.get(x)!)), parent.get(x)!));
-  const union = (x: string, y: string) => parent.set(find(x), find(y));
-  for (const l of laneSet.values()) union(l.a, l.b);
-  for (let guard = 0; guard < 30; guard++) {
-    const roots = new Set(nodes.map((n) => find(n.id)));
-    if (roots.size <= 1) break;
-    let best: [MapNode, MapNode] | null = null;
-    for (const p of nodes) for (const q of nodes) {
-      if (find(p.id) === find(q.id)) continue;
-      if (!best || dist(p, q) < dist(best[0], best[1])) best = [p, q];
+  // union-find connectivity repair — two-stage: first make the unlocked (rank-1)
+  // subgraph connected on its own lanes, then attach the locked stations. This
+  // guarantees a lock-free path always exists between rank-1 nodes, regardless
+  // of where rank-locked stations (e.g. halo_court R6, the_signal R12) land.
+  //
+  // Each pass builds its own union-find scoped to the eligible pool, seeded only
+  // from lanes whose BOTH endpoints are in that pool. A shared/global union-find
+  // (unioned once over every lane up front) would leak connectivity through
+  // locked stations into the unlocked-only pass — e.g. two unlocked nodes that
+  // are only bridged via a locked station would be reported as already
+  // connected, silently skipping the repair they need.
+  const lockedIds = new Set(STATIONS.filter((s) => s.unlockRank > 1).map((s) => s.id));
+  const repair = (eligible: (n: MapNode) => boolean) => {
+    const pool = nodes.filter(eligible);
+    const poolIds = new Set(pool.map((n) => n.id));
+    const parent = new Map<string, string>(pool.map((n) => [n.id, n.id]));
+    const find = (x: string): string => (parent.get(x) === x ? x : (parent.set(x, find(parent.get(x)!)), parent.get(x)!));
+    const union = (x: string, y: string) => parent.set(find(x), find(y));
+    for (const l of laneSet.values()) {
+      if (poolIds.has(l.a) && poolIds.has(l.b)) union(l.a, l.b);
     }
-    if (!best) break;
-    addLane(best[0], best[1]);
-    union(best[0].id, best[1].id);
-  }
+    for (let guard = 0; guard < 30; guard++) {
+      const roots = new Set(pool.map((n) => find(n.id)));
+      if (roots.size <= 1) break;
+      let best: [MapNode, MapNode] | null = null;
+      for (const p of pool) for (const q of pool) {
+        if (find(p.id) === find(q.id)) continue;
+        if (!best || dist(p, q) < dist(best[0], best[1])) best = [p, q];
+      }
+      if (!best) break;
+      addLane(best[0], best[1]);
+      union(best[0].id, best[1].id);
+    }
+  };
+  repair((n) => !lockedIds.has(n.id));
+  repair(() => true);
 
   // two long shortcuts for route choice
   const candidates = [] as Array<[MapNode, MapNode, number]>;

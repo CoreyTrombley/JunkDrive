@@ -49,3 +49,20 @@ describe('routing', () => {
     }
   });
 });
+
+describe('rank-lock safety (seed sweep)', () => {
+  const LOCKED = new Set(['halo_court', 'the_signal']);
+  it('every seed keeps the rank-1 world connected without locked stations', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const m = generateSectorMap(1, seed);
+      const blocked = LOCKED;
+      const free = m.nodes.filter((n) => !LOCKED.has(n.id));
+      for (const target of free) {
+        if (target.id === 'rust_harbor') continue;
+        const r = shortestPath(m, 'rust_harbor', target.id, blocked);
+        expect(r, `seed ${seed} → ${target.id}`).not.toBeNull();
+        for (const hop of r!.path) expect(LOCKED.has(hop)).toBe(false);
+      }
+    }
+  });
+});

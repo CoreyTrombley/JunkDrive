@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { store, clockTick, getState } from '../engine/store';
-import { STATIONS_BY_ID } from '../config/stations';
+import { STATIONS, STATIONS_BY_ID } from '../config/stations';
 import { MARKET_EVENTS_BY_ID } from '../config/events';
 import { travelDurationMs, canSkipTravel } from '../engine/derived';
-import { startJump, completeJump } from '../engine/actions';
+import { startJump, completeJump, refundFuel } from '../engine/actions';
 import { bestRoute, goodById } from '../engine/pricing';
-import { generateSectorMap, nodeById, GATE_NODE_ID, type MapNode } from '../engine/mapgen';
+import { generateSectorMap, nodeById, type MapNode } from '../engine/mapgen';
 import { routeThrough } from '../engine/routing';
 import { formatCredits, formatDuration, formatPct } from '../engine/num';
 import { dressStationForSector, stationDisplayName } from '../engine/sectorgen';
 import { ContractsPanel } from './ContractsPanel';
 import { now } from '../engine/time';
+import { emit } from '../engine/bus';
 
 export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: boolean) => void; onArrive: () => void }) {
   const s = store.value;
@@ -20,11 +21,14 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
   const [traveling, setTraveling] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hopDoneRef = useRef<(() => void) | null>(null);
+  const inFlightFuelRef = useRef(0);
 
   // If the user leaves the Map mid-route, drop the pending hop: the ship simply
   // stays at its last committed node. Without this, the stale timeout would fire
-  // after unmount, mutate state, and snap the user back to the market tab.
+  // after unmount, mutate state, and snap the user back to the market tab. A hop
+  // cancelled this way never arrives, so its fuel spend is refunded.
   useEffect(() => () => {
+    if (timeoutRef.current) refundFuel(inFlightFuelRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = null;
     hopDoneRef.current = null;
@@ -37,7 +41,8 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
   const hint = scannerLvl >= 3 ? bestRoute(s) : null;
   const hintGood = hint ? goodById(hint.goodId) : null;
 
-  const plan = stops.length ? routeThrough(map, [s.currentStation, ...stops]) : null;
+  const blocked = new Set(STATIONS.filter((st) => st.unlockRank > s.rank).map((st) => st.id));
+  const plan = stops.length ? routeThrough(map, [s.currentStation, ...stops], blocked) : null;
 
   function nodeLabel(node: MapNode): string {
     if (node.kind === 'station') {
@@ -66,6 +71,7 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
       hopDoneRef.current = null;
+      inFlightFuelRef.current = 0;
       setTraveling(null);
       setStops([]);
       onHyperspace(false);
@@ -76,12 +82,17 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
       if (i >= path.length) return finish();
       const target = path[i];
       const res = startJump(target);
-      if (!res.ok) return finish();
+      if (!res.ok) {
+        emit({ type: 'toast', text: `Route interrupted — ${res.reason ?? 'no lane'}`, icon: '🛑' });
+        return finish();
+      }
+      inFlightFuelRef.current = res.lane?.fuel ?? 0;
       setTraveling(target);
       const dur = travelDurationMs(getState()) * (res.lane?.trait === 'express' ? 0.5 : 1);
       const complete = () => {
         timeoutRef.current = null;
         hopDoneRef.current = null;
+        inFlightFuelRef.current = 0;
         completeJump(target, { finalStop: i === path.length - 1, laneTrait: res.lane?.trait });
         if (getState().pendingEncounter) return finish(); // ambushed — route aborts here
         runHop(i + 1);
