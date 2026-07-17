@@ -492,3 +492,7 @@ button { font-family: inherit; }
   border-radius: 999px; padding: 5px 10px; font-size: 11px; font-family: inherit;
 }
 .mc-chip.on { opacity: 1; border-color: var(--accent); color: var(--accent); }
+
+.g-stock { font-size: 9px; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 4px; }
+.g-stock.scarce { color: #ffb37a; border: 1px solid #ffb37a55; }
+.g-stock.glut { color: #7fd8ff; border: 1px solid #7fd8ff55; }

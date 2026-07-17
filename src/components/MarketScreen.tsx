@@ -9,6 +9,7 @@ import type { Good } from '../config/types';
 import { now } from '../engine/time';
 import { applyMarketView, SORT_LABELS, type MarketSort } from '../engine/marketview';
 import { updateSettings } from '../engine/actions';
+import { getStock, stockBaseline } from '../engine/stocks';
 
 function Sparkline({ history, volatility }: { history: number[]; volatility: keyof typeof VOLATILITY_BANDS }) {
   const band = VOLATILITY_BANDS[volatility];
@@ -86,6 +87,9 @@ export function MarketScreen() {
         const owned = s.cargo[g.id]?.qty ?? 0;
         const wave = s.waves[g.id];
         const disabled = isTradeDisabled(s.activeEvents, s.currentStation, g.id, t);
+        const baseline = stockBaseline(s.currentStation, g, s.runSeed ?? 0);
+        const stock = getStock(s, s.currentStation, g.id);
+        const stockState = stock < baseline * 0.5 ? 'scarce' : stock > baseline * 1.5 ? 'glut' : null;
 
         return (
           <div key={g.id} class={`good-row${locked ? ' locked' : ''}`}>
@@ -101,6 +105,7 @@ export function MarketScreen() {
                   <div class="g-price-line">
                     <span class="g-price mono">{formatCredits(price)}</span>
                     <span class={`g-badge ${pct >= 0 ? 'up' : 'down'}`}>{pct >= 0 ? '▲' : '▼'} {formatPct(Math.abs(pct))}</span>
+                    {stockState && <span class={`g-stock ${stockState}`}>{stockState === 'scarce' ? 'SCARCE' : 'GLUT'}</span>}
                   </div>
                   {wave && <Sparkline history={wave.history} volatility={g.volatility} />}
                   <div class="g-owned">{owned > 0 ? `Owned: ${formatNum(owned)} · ` : disabled ? 'Embargoed here · ' : ''}{g.mass}t</div>
