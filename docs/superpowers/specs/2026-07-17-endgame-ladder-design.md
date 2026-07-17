@@ -34,7 +34,7 @@ the wall. The wall is:
     is ≥ **2,000** (a competent mid-hold flip qualifies; penny flips don't)
   - **+1** per salvage-field claim
 - Requirement to open gate → sector d: `resonanceNeeded(d) = d ≤ 10 ? 0 : ceil(6 × 1.062^(d−10))`
-  (S11: 7 · S30: 20 · S50: 67 · S75: 300 · S90: 738 · S99: 1269 charges).
+  (S11: 7 · S30: 20 · S50: 67 · S75: 300 · S90: 739 · S99: 1269 charges).
 - Rank requirements: unchanged for d ≤ 10 (rank 20…100); **none past S10** — resonance is the
   gate, rank becomes a pure prestige ladder.
 - Gate panel shows `Resonance N / needed` alongside the toll; HUD ticker calls out a charged gate.
