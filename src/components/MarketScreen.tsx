@@ -68,7 +68,7 @@ export function MarketScreen() {
                     <span class={`g-badge ${pct >= 0 ? 'up' : 'down'}`}>{pct >= 0 ? '▲' : '▼'} {formatPct(Math.abs(pct))}</span>
                   </div>
                   {wave && <Sparkline history={wave.history} volatility={g.volatility} />}
-                  <div class="g-owned">{owned > 0 ? `Owned: ${formatNum(owned)}` : disabled ? 'Embargoed here' : ' '}</div>
+                  <div class="g-owned">{owned > 0 ? `Owned: ${formatNum(owned)} · ` : disabled ? 'Embargoed here · ' : ''}{g.mass}t</div>
                 </>
               )}
             </div>
