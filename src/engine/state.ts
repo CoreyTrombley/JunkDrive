@@ -140,6 +140,9 @@ export interface GameState {
 
   extraSectorGoods: Record<number, string[]>; // sector -> good ids generated for it
 
+  /** Sparse per-station stock levels; missing entry = baseline (see engine/stocks.ts). */
+  stocks: Record<string, Record<string, number>>;
+
   settings: Settings;
   onboarding: { step: number; complete: boolean; skipped: boolean };
   stats: {
@@ -219,6 +222,8 @@ export function createInitialState(): GameState {
     pendingJackpot: null,
 
     extraSectorGoods: {},
+
+    stocks: {},
 
     settings: {
       chillMode: false,

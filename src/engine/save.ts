@@ -45,5 +45,8 @@ export function importSaveCode(code: string): GameState {
   if (typeof (parsed as Record<string, unknown>).runSeed !== 'number') {
     (parsed as Record<string, unknown>).runSeed = 0;
   }
+  if (typeof (parsed as Record<string, unknown>).stocks !== 'object' || (parsed as Record<string, unknown>).stocks === null) {
+    (parsed as Record<string, unknown>).stocks = {};
+  }
   return parsed as GameState;
 }

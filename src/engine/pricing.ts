@@ -7,6 +7,7 @@ import type { GameState } from './state';
 import { getState } from './store';
 import { computePrice, eventMultiplier, type ActiveMarketEvent } from './price';
 import { now } from './time';
+import { stockBaseline, stockPriceMult } from './stocks';
 
 const sectorGoodRe = /^s(\d+)_g(\d+)/;
 
@@ -79,7 +80,11 @@ export function getPrice(state: GameState, stationId: string, goodId: string): n
   const waveValue = wave ? wave.value : 1;
   const bias = biasFor(stationId, good, state.runSeed ?? 0);
   const evMult = eventMultiplier(state.activeEvents, stationId, goodId, now());
-  return computePrice({ base: good.base, bias, waveValue, eventMult: evMult, sector: state.sector });
+  const raw = computePrice({ base: good.base, bias, waveValue, eventMult: evMult, sector: state.sector });
+  const baseline = stockBaseline(stationId, good, state.runSeed ?? 0);
+  const entry = state.stocks?.[stationId]?.[goodId];
+  const stock = entry !== undefined ? entry : baseline;
+  return raw * stockPriceMult(stock, baseline);
 }
 
 export function isTradeDisabled(events: ActiveMarketEvent[], stationId: string, goodId: string, atTime: number): boolean {

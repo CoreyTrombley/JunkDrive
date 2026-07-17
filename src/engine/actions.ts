@@ -21,6 +21,7 @@ import {
   pulseWave, fastForwardWave, PULSE_INTERVAL_MS, initWave, type ActiveMarketEvent,
 } from './price';
 import { goodById, getPrice, isTradeDisabled, allUnlockedGoods } from './pricing';
+import { applyStockTrade, regenStocks } from './stocks';
 import {
   rigUnitCost, rigBatchCost, maxAffordableRigQty, milestoneMultiplier,
   codexBonusMult, globalIncomeMult, totalYardRatePerSec, gateToll,
@@ -160,6 +161,7 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     settings: { ...fresh.settings, ...loaded.settings },
     stats: { ...fresh.stats, ...loaded.stats },
     runSeed: typeof loaded.runSeed === 'number' ? loaded.runSeed : 0,
+    stocks: (loaded as Partial<GameState>).stocks ?? {},
   };
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
@@ -241,6 +243,7 @@ export function importSave(code: string): { ok: boolean; reason?: string } {
       ...loaded,
       settings: { ...fresh.settings, ...loaded.settings },
       stats: { ...fresh.stats, ...loaded.stats },
+      stocks: loaded.stocks ?? {},
     };
     store.value = merged;
     writeSave(merged);
@@ -292,7 +295,8 @@ function processMarketPulses(state: GameState, t: number): GameState {
     fastForwardWave(w, good.volatility, pulses, sessionRng);
     waves[goodId] = w;
   }
-  return { ...state, waves, lastMarketPulseAt: state.lastMarketPulseAt + pulses * PULSE_INTERVAL_MS };
+  state = regenStocks({ ...state, waves, lastMarketPulseAt: state.lastMarketPulseAt + pulses * PULSE_INTERVAL_MS }, pulses);
+  return state;
 }
 
 function maybeSpawnAmbientEvent(state: GameState, t: number): GameState {
@@ -393,16 +397,20 @@ export function buyGood(goodId: string, qty: number): { ok: boolean; reason?: st
     emit({ type: 'haptic', pattern: 'error' });
     return { ok: false, reason: 'Not enough credits.' };
   }
-  setState((s) => ({
-    ...s,
-    credits: s.credits - cost,
-    cargo: addCargo(s.cargo, goodId, buyQty, price),
-    stats: {
-      ...s.stats,
-      creditsSpent: s.stats.creditsSpent + cost,
-      goodsBought: { ...s.stats.goodsBought, [goodId]: (s.stats.goodsBought[goodId] ?? 0) + buyQty },
-    },
-  }));
+  setState((s) => {
+    let st: GameState = {
+      ...s,
+      credits: s.credits - cost,
+      cargo: addCargo(s.cargo, goodId, buyQty, price),
+      stats: {
+        ...s.stats,
+        creditsSpent: s.stats.creditsSpent + cost,
+        goodsBought: { ...s.stats.goodsBought, [goodId]: (s.stats.goodsBought[goodId] ?? 0) + buyQty },
+      },
+    };
+    st = applyStockTrade(st, s.currentStation, goodId, -buyQty);
+    return st;
+  });
   emit({ type: 'sfx', id: 'buy' });
   emit({ type: 'haptic', pattern: 'tap' });
   emit({ type: 'floater', text: formatSignedCredits(-cost), kind: 'info' });
@@ -466,6 +474,7 @@ export function sellGood(goodId: string, qty: number): { ok: boolean; reason?: s
       return q;
     });
     st = checkMilestones(st);
+    st = applyStockTrade(st, s.currentStation, goodId, sellQty);
     return st;
   });
 
