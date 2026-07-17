@@ -1,6 +1,6 @@
 import { GOODS } from './goods';
 import { STATIONS } from './stations';
-import { JACKPOTS } from './events';
+import { JACKPOTS, HONOR_BADGES } from './events';
 import { ENCOUNTERS, MARKET_EVENTS } from './events';
 
 export interface CodexSet {
@@ -33,6 +33,7 @@ export const CODEX_SETS: CodexSet[] = [
   { id: 'all_jackpots', name: 'Jackpot Legend', icon: '🎰', kind: 'jackpots', memberIds: JACKPOTS.map((j) => j.id) },
   { id: 'all_encounters', name: 'Seen It All', icon: '🃏', kind: 'encounters', memberIds: ENCOUNTERS.map((e) => e.id) },
   { id: 'all_events', name: 'Market Watcher', icon: '📊', kind: 'events', memberIds: MARKET_EVENTS.map((e) => e.id) },
+  { id: 'honor_badges', name: 'Monuments', icon: '🗿', kind: 'jackpots', memberIds: HONOR_BADGES.map((b) => b.id) },
 ];
 
 export const CODEX_SETS_BY_ID: Record<string, CodexSet> = Object.fromEntries(CODEX_SETS.map((s) => [s.id, s]));

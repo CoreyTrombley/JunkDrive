@@ -171,6 +171,21 @@ export function bootGame(): { offlineReport: GameState['pendingOfflineReport'] }
     gateResonance: (loaded as Partial<GameState>).gateResonance ?? 0,
     pendingRimClamp: (loaded as Partial<GameState>).pendingRimClamp ?? false,
   };
+
+  if (state.sector > SECTOR_CAP) {
+    if (!Array.isArray(state.quests)) state = { ...state, quests: [] }; // stampCodex maps over quests
+    state = {
+      ...state,
+      sector: SECTOR_CAP,
+      maxSectorReached: Math.min(state.maxSectorReached, SECTOR_CAP),
+      bests: { ...state.bests, deepestSector: Math.min(state.bests.deepestSector, SECTOR_CAP) },
+      currentStation: state.currentStation.startsWith('wp-') ? 'rust_harbor' : state.currentStation,
+      pendingRimClamp: true,
+    };
+    state = stampCodex(state, 'jackpots', 'rim_walker');
+    state = stampCodex(state, 'jackpots', 'beyond_the_rim');
+  }
+
   const t = now();
   const elapsed = Math.max(0, t - state.lastSeen);
 
@@ -760,6 +775,10 @@ export function dismissPendingJackpot(): void {
   setState((s) => ({ ...s, pendingJackpot: null }));
 }
 
+export function acknowledgeRimClamp(): void {
+  setState((s) => ({ ...s, pendingRimClamp: false }));
+}
+
 // ---------------------------------------------------------------------------
 // Encounters
 // ---------------------------------------------------------------------------
@@ -1251,7 +1270,7 @@ export function buyRelic(relicId: string): { ok: boolean; reason?: string } {
 // ---------------------------------------------------------------------------
 
 export function canEnterNextSector(state: GameState): boolean {
-  return state.rank >= sectorUnlockRank(state.sector + 1);
+  return state.sector < SECTOR_CAP && state.rank >= sectorUnlockRank(state.sector + 1);
 }
 
 export function nextSectorToll(state: GameState): number {
@@ -1274,7 +1293,7 @@ export function payGateToll(): { ok: boolean; reason?: string } {
     const newGoods = generateSectorGoods(dest, s.runSeed ?? 0);
     const waves = { ...s.waves };
     for (const g of newGoods) if (!waves[g.id]) waves[g.id] = initWave();
-    return {
+    let st: GameState = {
       ...s,
       credits: s.credits - toll,
       sector: dest,
@@ -1284,10 +1303,19 @@ export function payGateToll(): { ok: boolean; reason?: string } {
       waves,
       bests: { ...s.bests, deepestSector: Math.max(s.bests.deepestSector, dest) },
     };
+    if (dest === SECTOR_CAP) st = stampCodex(st, 'jackpots', 'rim_walker');
+    return st;
   });
-  emit({ type: 'sfx', id: 'toll' });
-  emit({ type: 'confetti', power: 'big' });
-  emit({ type: 'toast', text: `SECTOR ${dest} — everything's about to get expensive.`, icon: '🌌' });
+  if (dest === SECTOR_CAP) {
+    emit({ type: 'sfx', id: 'eternal' });
+    emit({ type: 'confetti', power: 'big' });
+    emit({ type: 'haptic', pattern: 'jackpot' });
+    emit({ type: 'toast', text: 'THE RIM — SECTOR 99. There is nothing further. There is nothing better.', icon: '🎖️' });
+  } else {
+    emit({ type: 'sfx', id: 'toll' });
+    emit({ type: 'confetti', power: 'big' });
+    emit({ type: 'toast', text: `SECTOR ${dest} — everything's about to get expensive.`, icon: '🌌' });
+  }
   return { ok: true };
 }
 

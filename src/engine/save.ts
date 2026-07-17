@@ -1,4 +1,5 @@
 import type { GameState } from './state';
+import { SECTOR_CAP } from './formulas';
 
 const SAVE_KEY = 'junkrun_save_v1';
 export const SCHEMA_VERSION = 1;
@@ -54,5 +55,19 @@ export function importSaveCode(code: string): GameState {
   if (!Array.isArray((parsed as Record<string, unknown>).visitedBeacons)) (parsed as Record<string, unknown>).visitedBeacons = [];
   if (typeof (parsed as Record<string, unknown>).gateResonance !== 'number') (parsed as Record<string, unknown>).gateResonance = 0;
   if (typeof (parsed as Record<string, unknown>).pendingRimClamp !== 'boolean') (parsed as Record<string, unknown>).pendingRimClamp = false;
+
+  const p = parsed as Record<string, any>;
+  if (typeof p.sector === 'number' && p.sector > SECTOR_CAP) {
+    p.sector = SECTOR_CAP;
+    if (typeof p.maxSectorReached === 'number') p.maxSectorReached = Math.min(p.maxSectorReached, SECTOR_CAP);
+    if (p.bests && typeof p.bests.deepestSector === 'number') p.bests.deepestSector = Math.min(p.bests.deepestSector, SECTOR_CAP);
+    if (typeof p.currentStation === 'string' && p.currentStation.startsWith('wp-')) p.currentStation = 'rust_harbor';
+    if (p.codex && p.codex.jackpots) {
+      p.codex.jackpots['rim_walker'] = true;
+      p.codex.jackpots['beyond_the_rim'] = true;
+    }
+    p.pendingRimClamp = true;
+  }
+
   return parsed as GameState;
 }

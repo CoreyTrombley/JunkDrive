@@ -16,10 +16,11 @@ import { EncounterModal } from './components/EncounterModal';
 import { JackpotModal } from './components/JackpotModal';
 import { OfflineModal } from './components/OfflineModal';
 import { Onboarding } from './components/Onboarding';
-import { onUiEvent } from './engine/bus';
+import { emit, onUiEvent } from './engine/bus';
 import { dressStationForSector } from './engine/sectorgen';
 import { setStationAmbience } from './engine/audio';
 import { generateSectorMap, nodeById, WAYPOINT_THEME } from './engine/mapgen';
+import { acknowledgeRimClamp } from './engine/actions';
 
 export function App() {
   const s = store.value;
@@ -52,6 +53,14 @@ export function App() {
   useEffect(() => {
     if (s.pendingOfflineReport) setActiveOfflineReport(s.pendingOfflineReport);
   }, [s.pendingOfflineReport]);
+
+  useEffect(() => {
+    if (!s.pendingRimClamp) return;
+    emit({ type: 'sfx', id: 'eternal' });
+    emit({ type: 'confetti', power: 'big' });
+    emit({ type: 'toast', text: 'The charts end at Sector 99 now — and you were already past it. RIM WALKER + BEYOND THE RIM earned.', icon: '🗿' });
+    acknowledgeRimClamp();
+  }, [s.pendingRimClamp]);
 
   const map = generateSectorMap(s.sector, s.runSeed ?? 0);
   const node = nodeById(map, s.currentStation);

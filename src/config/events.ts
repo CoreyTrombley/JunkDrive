@@ -119,7 +119,14 @@ export const JACKPOTS: JackpotDef[] = [
   { id: 'ghost_frequency', name: 'GHOST FREQUENCY', icon: '👻', copy: "You shouldn't have heard that." },
 ];
 
-export const JACKPOTS_BY_ID: Record<string, JackpotDef> = Object.fromEntries(JACKPOTS.map((j) => [j.id, j]));
+// Honor badges — codex-only monuments; deliberately EXCLUDED from JACKPOTS so the
+// arrival roll and the Jackpot Legend set never include them.
+export const HONOR_BADGES: JackpotDef[] = [
+  { id: 'rim_walker', name: 'RIM WALKER', icon: '🎖️', copy: 'Sector 99. The lanes end here. You walked them all.' },
+  { id: 'beyond_the_rim', name: 'BEYOND THE RIM', icon: '🗿', copy: 'You sailed past the edge before there was an edge.' },
+];
+
+export const JACKPOTS_BY_ID: Record<string, JackpotDef> = Object.fromEntries([...JACKPOTS, ...HONOR_BADGES].map((j) => [j.id, j]));
 
 // Arrival roll table — spec §6.
 export const ARRIVAL_ROLL_WEIGHTS = {

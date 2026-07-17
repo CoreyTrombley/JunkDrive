@@ -417,6 +417,12 @@ class Synth {
       case 'express':
         this.noise(0.5, { gain: 0.14, filterType: 'bandpass', filterFreq: 600, filterFreqEnd: 6000, filterQ: 1.2 });
         break;
+      case 'eternal':
+        this.tone(40, 4, { startFreq: 30, gain: 0.3 });
+        [261.63, 329.63, 392, 523.25, 659.25, 783.99].forEach((f, i) => this.tone(f, 0.6, { type: 'triangle', gain: 0.16, delay: 0.4 + i * 0.22 }));
+        this.tone(1046.5, 2.2, { gain: 0.12, delay: 1.9 });
+        this.noise(1.5, { gain: 0.1, filterType: 'highpass', filterFreq: 5000, filterFreqEnd: 12000, delay: 1.2 });
+        break;
     }
   }
 
