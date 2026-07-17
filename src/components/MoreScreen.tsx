@@ -256,7 +256,7 @@ export function MoreScreen() {
 
       <div class="more-section">
         <div class="section-label">About</div>
-        <div class="empty-hint">JUNKRUN v2.0 · Buy junk. Plot routes. Work the market. Endless.</div>
+        <div class="empty-hint">JUNKRUN v2.1 · Buy junk. Plot routes. Work the market. Endless.</div>
       </div>
     </div>
   );
