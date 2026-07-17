@@ -32,7 +32,7 @@ export function maxFuel(state: GameState): number {
 
 export function fuelRegenSec(state: GameState): number {
   const lvl = state.shipUpgrades['fuel_recycler'] || 0;
-  return Math.max(40, BASE_FUEL_REGEN_SEC - lvl * 7);
+  return Math.max(35, BASE_FUEL_REGEN_SEC - lvl * 6);
 }
 
 export function scanChanceFor(state: GameState, stationId: string): number {

@@ -17,12 +17,12 @@ describe('trading tuning constants', () => {
     expect(upgradeCost(def, 1)).toBe(Math.round(800 * 1.65));
   });
 
-  it('fuel regen: base 75s, -7s/level, floor 40s', () => {
-    expect(BASE_FUEL_REGEN_SEC).toBe(75);
+  it('fuel regen: base 65s, -6s/level, floor 35s', () => {
+    expect(BASE_FUEL_REGEN_SEC).toBe(65);
     const s = createInitialState();
-    expect(fuelRegenSec(s)).toBe(75);
+    expect(fuelRegenSec(s)).toBe(65);
     s.shipUpgrades['fuel_recycler'] = 5;
-    expect(fuelRegenSec(s)).toBe(40);
+    expect(fuelRegenSec(s)).toBe(35);
   });
 
   it('demand spike ceiling is ×6', () => {

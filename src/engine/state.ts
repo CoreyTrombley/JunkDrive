@@ -10,8 +10,8 @@ import type { MarketSort, MarketFilters } from './marketview';
 import type { Manifest } from './manifests';
 
 export const BASE_HOLD_TONS = 20;
-export const BASE_MAX_FUEL = 5;
-export const BASE_FUEL_REGEN_SEC = 75;
+export const BASE_MAX_FUEL = 8;
+export const BASE_FUEL_REGEN_SEC = 65;
 export const STARTING_CREDITS = 500;
 export const STARTING_STATION = 'rust_harbor';
 
@@ -147,6 +147,9 @@ export interface GameState {
   manifests: Manifest[];
   manifestSeq: number;
 
+  lastSalvageAt: Record<string, number>;
+  visitedBeacons: string[];
+
   settings: Settings;
   onboarding: { step: number; complete: boolean; skipped: boolean };
   stats: {
@@ -231,6 +234,9 @@ export function createInitialState(): GameState {
 
     manifests: [],
     manifestSeq: 1,
+
+    lastSalvageAt: {},
+    visitedBeacons: [],
 
     settings: {
       chillMode: false,

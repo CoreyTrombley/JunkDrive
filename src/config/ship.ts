@@ -24,7 +24,7 @@ export const SHIP_UPGRADES: ShipUpgradeDef[] = [
     id: 'fuel_recycler',
     name: 'Fuel Recycler',
     icon: '♻️',
-    effectLabel: (lvl) => `Regen ${Math.max(40, 75 - lvl * 7)}s / pip`,
+    effectLabel: (lvl) => `Regen ${Math.max(35, 65 - lvl * 6)}s / pip`,
     baseCost: 5_000,
     costGrowth: 3,
     maxLevel: 5,
