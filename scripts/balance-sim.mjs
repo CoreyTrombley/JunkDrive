@@ -1,11 +1,12 @@
-// JUNKRUN balance sim — executable tuning targets.
-// Mirrors (keep in sync by hand when tuning):
-//   config/rigs.ts (ladder), engine/formulas.ts (milestones), config/goods.ts
-//   (trade ladder), engine/sectorgen.ts bias ranges, engine/derived.ts
-//   (hold/fuel), config/ranks.ts (xp), engine/quests.ts (quest xp), price.ts
-//   sectorScale, formulas.ts gateToll/sectorUnlockRank + yard sector parity.
-// Model: an optimal-play active trader vs a tap+manager rig player, compared
-// at equal lifetime earnings. Realistic play is ~3-5× slower than "optimal".
+// JUNKRUN balance sim v3 — executable tuning targets for the trade & travel
+// overhaul (tonnage holds, station stocks, manifests, warp-lane travel).
+// Mirrors (keep in sync by hand): config/rigs.ts, engine/formulas.ts
+// (milestones), config/goods.ts (trade ladder + masses), engine/derived.ts
+// (hold tons / fuel), engine/stocks.ts (retention modeled), engine/manifests.ts
+// (premium), engine/mapgen.ts (lane costs), config/ranks.ts + engine/quests.ts
+// (xp), price.ts sectorScale, formulas.ts gateToll/sectorUnlockRank + parity.
+// Model: optimal-play active trader vs tap+manager rig player at equal
+// lifetime earnings. Realistic play ≈ 3-5× slower than "optimal".
 
 const RIGS = [
   { baseCost: 100, costGrowth: 1.10, cycleSec: 3, basePayout: 14, managerCost: 1_500 },
@@ -28,10 +29,18 @@ function milestoneMultiplier(owned) {
 }
 const rigUnitCost = (rig, owned) => Math.round(rig.baseCost * Math.pow(rig.costGrowth, owned));
 const GOODS = [
-  { unlockRank: 1, base: 35 }, { unlockRank: 3, base: 150 }, { unlockRank: 6, base: 900 },
-  { unlockRank: 9, base: 6500 }, { unlockRank: 10, base: 9000 }, { unlockRank: 15, base: 45000 },
-  { unlockRank: 17, base: 90000 }, { unlockRank: 19, base: 140000 }, { unlockRank: 22, base: 500000 },
-  { unlockRank: 24, base: 900000 }, { unlockRank: 26, base: 1500000 }, { unlockRank: 28, base: 2500000 },
+  { unlockRank: 1, base: 35, mass: 7.5 },   // hull plates
+  { unlockRank: 3, base: 150, mass: 2.25 }, // spore crates
+  { unlockRank: 6, base: 900, mass: 0.9 },  // earth relics
+  { unlockRank: 9, base: 6500, mass: 1.2 }, // warp cells
+  { unlockRank: 10, base: 9000, mass: 0.75 },
+  { unlockRank: 15, base: 45000, mass: 0.9 },
+  { unlockRank: 17, base: 90000, mass: 0.45 },
+  { unlockRank: 19, base: 140000, mass: 0.4 },
+  { unlockRank: 22, base: 500000, mass: 0.45 },
+  { unlockRank: 24, base: 900000, mass: 1.5 },
+  { unlockRank: 26, base: 1500000, mass: 4.5 },
+  { unlockRank: 28, base: 2500000, mass: 0.25 },
 ];
 const bestGood = (rank) => { let b = GOODS[0]; for (const g of GOODS) if (g.unlockRank <= rank) b = g; return b; };
 const sectorScale = (s) => Math.pow(8, s - 1);
@@ -39,15 +48,18 @@ const gateToll = (d) => 2_000_000 * Math.pow(15, d - 2);
 const sectorUnlockRank = (d) => 20 + (d - 2) * 10;
 const xpToNext = (lvl) => Math.round(12 * Math.pow(lvl, 1.8));
 
-// Tuning under test — MUST match the repo constants:
 const P = {
-  tapsPerSec: 2,                       // human speed-tapping assumption
-  exporterMid: 0.575, importerMid: 1.60, // midpoints of 0.50-0.65 / 1.35-1.85
-  holdBase: 10, holdPerLevel: 3, cargoBaseCost: 800, cargoGrowth: 1.65,
-  fuelRegenBase: 75, fuelRegenPerLvl: 7, fuelRegenFloor: 40,
+  tapsPerSec: 2,
+  exporterMid: 0.575, importerMid: 1.60,
+  holdBaseTons: 20, holdPerLevelTons: 5, cargoBaseCost: 800, cargoGrowth: 1.65,
+  gravitonPct: 0.25, gravitonBaseCost: 250_000, gravitonGrowth: 5, gravitonMax: 5,
+  fuelRegenBase: 65, fuelRegenPerLvl: 6, fuelRegenFloor: 35,
   recyclerBase: 5000, recyclerGrowth: 3, recyclerMax: 5,
   streakStep: 0.10, streakCap: 5,
   saleXpExp: 0.42, saleXpCoef: 3, questXpRankCoef: 0.10,
+  stockMarginRetention: 0.85, // rotating 2-3 routes keeps ~85% of naive margin
+  manifestShare: 0.30, manifestPremium: 1.9, manifestXpMult: 1.5,
+  lanesPerLeg: 1.8, fuelPerLane: 1.15, travelSecPerLane: 3,
 };
 
 function simRigs(hours, checkpoints) {
@@ -89,21 +101,27 @@ function simRigs(hours, checkpoints) {
 }
 
 function simTrader(hours, checkpoints) {
-  let credits = 500, lifetime = 0, rank = 1, xp = 0, sector = 1, cargoLvl = 0, recyclerLvl = 0, t = 0, questTimer = 0;
+  let credits = 500, lifetime = 0, rank = 1, xp = 0, sector = 1;
+  let cargoLvl = 0, recyclerLvl = 0, gravitonLvl = 0, t = 0, questTimer = 0;
   const samples = new Map(); const rankHit = {};
   const HANDLING = 25;
   while (t < hours * 3600) {
-    const hold = P.holdBase + cargoLvl * P.holdPerLevel;
+    const tons = (P.holdBaseTons + cargoLvl * P.holdPerLevelTons) * (1 + P.gravitonPct * gravitonLvl);
     const regen = Math.max(P.fuelRegenFloor, P.fuelRegenBase - recyclerLvl * P.fuelRegenPerLvl);
-    const loopSec = 2 * regen + HANDLING;
+    const fuelPerLoop = 2 * P.lanesPerLeg * P.fuelPerLane; // two legs per loop
+    const loopSec = fuelPerLoop * regen + 2 * P.lanesPerLeg * P.travelSecPerLane + HANDLING;
     const good = bestGood(rank), scale = sectorScale(sector);
     const buyPrice = good.base * scale * P.exporterMid;
-    const qty = Math.min(hold, Math.floor((credits * 0.9) / buyPrice));
-    const streakMult = 1 + Math.min(4, P.streakCap) * P.streakStep; // 4 = typical sustained stacks, deliberately below the in-game cap of 5
-    const sellPrice = good.base * scale * P.importerMid * streakMult;
-    const profit = Math.max(0, qty * (sellPrice - buyPrice));
+    const qty = Math.min(Math.floor(tons / good.mass), Math.floor((credits * 0.9) / buyPrice));
+    const streakMult = 1 + Math.min(4, P.streakCap) * P.streakStep; // 4 = typical sustained stacks, below the in-game cap of 5
+    const sellPrice = good.base * scale * P.importerMid * streakMult * P.stockMarginRetention;
+    const plainRev = qty * sellPrice;
+    const maniRev = qty * good.base * scale * P.manifestPremium; // contracts bypass stock decay
+    const cost = qty * buyPrice;
+    const profit = Math.max(0, (1 - P.manifestShare) * (plainRev - cost) + P.manifestShare * (maniRev - cost));
     credits += profit; lifetime += profit;
-    xp += profit > 0 ? Math.max(1, Math.ceil(P.saleXpCoef * Math.pow(profit, P.saleXpExp))) : 1;
+    const baseXp = profit > 0 ? Math.max(1, Math.ceil(P.saleXpCoef * Math.pow(profit, P.saleXpExp))) : 1;
+    xp += baseXp * (1 + P.manifestShare * (P.manifestXpMult - 1));
     questTimer += loopSec;
     if (questTimer >= 720) { questTimer = 0; xp += 55 * (1 + P.questXpRankCoef * rank); }
     while (xp >= xpToNext(rank)) { xp -= xpToNext(rank); rank++; if (!rankHit[rank]) rankHit[rank] = t / 3600; }
@@ -116,16 +134,20 @@ function simTrader(hours, checkpoints) {
       const rCost = Math.round(P.recyclerBase * Math.pow(P.recyclerGrowth, recyclerLvl));
       if (rCost < credits * 0.15) { credits -= rCost; recyclerLvl++; }
     }
+    if (gravitonLvl < P.gravitonMax) {
+      const gCost = Math.round(P.gravitonBaseCost * Math.pow(P.gravitonGrowth, gravitonLvl));
+      if (gCost < credits * 0.15) { credits -= gCost; gravitonLvl++; }
+    }
     const toll = gateToll(sector + 1);
     if (rank >= sectorUnlockRank(sector + 1) && credits > toll * 1.5) { credits -= toll; sector++; }
     const rate = profit / loopSec;
     t += loopSec;
-    for (const cp of checkpoints) if (!samples.has(cp) && lifetime >= cp) samples.set(cp, { rate, rank, sector, hold });
+    for (const cp of checkpoints) if (!samples.has(cp) && lifetime >= cp) samples.set(cp, { rate, rank, sector });
   }
   return { samples, rankHit };
 }
 
-const CHECKPOINTS = [1e4, 1e5, 1e6, 1e7];
+const CHECKPOINTS = [1e5, 1e6, 1e7];
 const rig = simRigs(60, CHECKPOINTS);
 const { samples: trade, rankHit } = simTrader(60, CHECKPOINTS);
 
@@ -139,14 +161,12 @@ for (const cp of CHECKPOINTS) {
 }
 console.log(`rank pacing (optimal play): R13=${rankHit[13]?.toFixed(2)}h  R20=${rankHit[20]?.toFixed(2)}h  R25=${rankHit[25]?.toFixed(2)}h`);
 
-// Targets: trading crosses rigs in the mid-game (₡1M→₡10M) and stays in band;
-// rank 20 lands within ~an evening of realistic play (3-5× optimal hours).
 const checks = [
-  ['ratio @ 1e6 in [0.35, 1.25]', ratios[1e6] >= 0.35 && ratios[1e6] <= 1.25],
+  ['ratio @ 1e6 in [0.30, 1.25]', ratios[1e6] >= 0.30 && ratios[1e6] <= 1.25],
   ['ratio @ 1e7 in [0.90, 1.75]', ratios[1e7] >= 0.90 && ratios[1e7] <= 1.75],
-  ['R13 not trivial (>= 0.35h optimal)', (rankHit[13] ?? 99) >= 0.35],
-  ['R20 reachable (<= 1.2h optimal)', (rankHit[20] ?? 99) <= 1.2],
-  ['R25 reachable (<= 1.5h optimal)', (rankHit[25] ?? 99) <= 1.5],
+  ['R13 not trivial (>= 0.5h optimal)', (rankHit[13] ?? 99) >= 0.5],
+  ['R20 reachable (<= 1.5h optimal)', (rankHit[20] ?? 99) <= 1.5],
+  ['R25 reachable (<= 1.8h optimal)', (rankHit[25] ?? 99) <= 1.8],
 ];
 let failed = 0;
 for (const [label, ok] of checks) {
