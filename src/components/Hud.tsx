@@ -6,6 +6,7 @@ import { titleForRank } from '../config/ranks';
 import { STATIONS_BY_ID } from '../config/stations';
 import { goodById } from '../engine/pricing';
 import { canClaimDailyStreak } from '../engine/actions';
+import { stationDisplayName } from '../engine/sectorgen';
 
 export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
   const s = store.value;
@@ -31,7 +32,7 @@ export function Hud({ onOpenTicker }: { onOpenTicker?: () => void }) {
     const station = STATIONS_BY_ID[ev.stationId];
     const good = ev.goodId ? goodById(ev.goodId) : null;
     const label = good ? `${good.icon} ${good.name}` : 'Everything';
-    tickerItems.push(`📈 ${label} ${ev.disables ? 'blocked' : `×${ev.multiplier.toFixed(1)}`} @ ${station?.name ?? '?'} — ${formatDuration(ev.expiresAt - t)}`);
+    tickerItems.push(`📈 ${label} ${ev.disables ? 'blocked' : `×${ev.multiplier.toFixed(1)}`} @ ${station ? stationDisplayName(station.id, s.sector, s.runSeed ?? 0) : '?'} — ${formatDuration(ev.expiresAt - t)}`);
   }
   if (tickerItems.length === 0) tickerItems.push('🛰️ All quiet in The Drift…');
 

@@ -12,6 +12,7 @@ import { updateSettings } from '../engine/actions';
 import { getStock, stockBaseline } from '../engine/stocks';
 import { generateSectorMap, nodeById } from '../engine/mapgen';
 import { WaypointPanel } from './WaypointPanel';
+import { stationDisplayName } from '../engine/sectorgen';
 
 function Sparkline({ history, volatility }: { history: number[]; volatility: keyof typeof VOLATILITY_BANDS }) {
   const band = VOLATILITY_BANDS[volatility];
@@ -48,7 +49,7 @@ export function MarketScreen() {
       <div class="screen-header">
         <span class="icon">{station.icon}</span>
         <div>
-          <h1>{station.name}</h1>
+          <h1>{stationDisplayName(s.currentStation, s.sector, s.runSeed ?? 0)}</h1>
           <div class="sub">{station.blurb}</div>
         </div>
       </div>

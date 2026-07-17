@@ -8,7 +8,7 @@ import { bestRoute, goodById } from '../engine/pricing';
 import { generateSectorMap, nodeById, GATE_NODE_ID, type MapNode } from '../engine/mapgen';
 import { routeThrough } from '../engine/routing';
 import { formatCredits, formatDuration, formatPct } from '../engine/num';
-import { dressStationForSector } from '../engine/sectorgen';
+import { dressStationForSector, stationDisplayName } from '../engine/sectorgen';
 import { ContractsPanel } from './ContractsPanel';
 import { now } from '../engine/time';
 
@@ -146,7 +146,7 @@ export function MapScreen({ onHyperspace, onArrive }: { onHyperspace: (active: b
 
         {hint && hintGood && (
           <div class="route-hint">
-            📡 Best flip: <b>{STATIONS_BY_ID[hint.stationId]?.name}</b> — {hintGood.icon} {hintGood.name} {formatPct(hint.margin, { signed: true })}
+            📡 Best flip: <b>{stationDisplayName(hint.stationId, s.sector, s.runSeed ?? 0)}</b> — {hintGood.icon} {hintGood.name} {formatPct(hint.margin, { signed: true })}
           </div>
         )}
       </div>

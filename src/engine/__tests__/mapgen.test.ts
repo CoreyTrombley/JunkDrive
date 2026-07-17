@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateSectorMap, laneBetween, GATE_NODE_ID } from '../mapgen';
 import { STATIONS } from '../../config/stations';
+import { stationDisplayName } from '../sectorgen';
 
 function reachable(map: ReturnType<typeof generateSectorMap>): Set<string> {
   const adj = new Map<string, string[]>();
@@ -75,5 +76,19 @@ describe('sector map generation', () => {
       expect(n.y).toBeLessThanOrEqual(100);
       if (n.kind === 'outpost') expect(n.goodIds?.length).toBe(5);
     }
+  });
+});
+
+describe('stationDisplayName', () => {
+  it('uses the base name in sector 1 and the dressed name in sector 2+', () => {
+    expect(stationDisplayName('rust_harbor', 1, 777)).toBe('Rust Harbor');
+    const dressed = stationDisplayName('rust_harbor', 2, 777);
+    expect(dressed).not.toBe('Rust Harbor');
+    expect(dressed.length).toBeGreaterThan(0);
+    expect(stationDisplayName('rust_harbor', 2, 777)).toBe(dressed); // deterministic
+  });
+
+  it('falls back to the id for unknown stations', () => {
+    expect(stationDisplayName('wp-s1-0', 1, 777)).toBe('wp-s1-0');
   });
 });

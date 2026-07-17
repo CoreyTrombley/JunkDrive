@@ -5,6 +5,7 @@ import { goodById } from '../engine/pricing';
 import { STATIONS_BY_ID } from '../config/stations';
 import { formatCredits, formatDuration } from '../engine/num';
 import { now } from '../engine/time';
+import { stationDisplayName } from '../engine/sectorgen';
 
 export function ContractsPanel() {
   const s = store.value;
@@ -20,7 +21,7 @@ export function ContractsPanel() {
         return (
           <div key={m.id} class={`contract-row${ready ? ' ready' : ''}`}>
             <div class="c-main">
-              <div class="c-dest">{station?.icon} {station?.name ?? m.stationId} · ⏱ {formatDuration(m.expiresAt - t)}</div>
+              <div class="c-dest">{station?.icon} {station ? stationDisplayName(station.id, s.sector, s.runSeed ?? 0) : m.stationId} · ⏱ {formatDuration(m.expiresAt - t)}</div>
               <div class="c-items">
                 {m.items.map((it) => {
                   const g = goodById(it.goodId, s.runSeed ?? 0);

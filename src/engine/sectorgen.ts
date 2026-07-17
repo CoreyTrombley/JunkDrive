@@ -1,5 +1,6 @@
 import type { Good, Volatility } from '../config/types';
 import { mulberry32, hashSeed, pick, randRange, chance } from './rng';
+import { STATIONS_BY_ID } from '../config/stations';
 
 // Procedural sector content — spec §16.4. Sector 1 is the hand-authored
 // catalog (config/goods.ts, config/stations.ts). Sector N>=2 keeps the same
@@ -74,6 +75,13 @@ export function dressStationForSector(baseStationId: string, sector: number, run
   const suffix = pick(rng, STATION_SUFFIX);
   const hueShift = Math.round(randRange(rng, 20, 340));
   return { name: `${prefix} ${suffix}`, hueShift };
+}
+
+/** Canonical user-facing station name: hand-authored in sector 1, per-sector
+ *  dressing beyond — every UI surface must use this, not `station.name`. */
+export function stationDisplayName(stationId: string, sector: number, runSeed: number): string {
+  const dressed = dressStationForSector(stationId, sector, runSeed);
+  return dressed.name || STATIONS_BY_ID[stationId]?.name || stationId;
 }
 
 /** Re-rolled bias for sector-N goods across the 7 stations — new best routes every sector. */

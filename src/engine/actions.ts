@@ -35,7 +35,7 @@ import {
 import { mulberry32, randRange, randInt, chance, pickWeighted, pick, shuffle, type RngFn } from './rng';
 import { generateQuest, generateFullRail } from './quests';
 import { generateManifest, canDeliver, MANIFEST_SLOTS, type Manifest } from './manifests';
-import { generateSectorGoods } from './sectorgen';
+import { generateSectorGoods, stationDisplayName } from './sectorgen';
 import { loadSave, writeSave, exportSaveCode, importSaveCode } from './save';
 import { generateSectorMap, laneBetween, nodeById, GATE_NODE_ID, type MapLane } from './mapgen';
 import { now } from './time';
@@ -623,7 +623,7 @@ function applyArrivalRoll(state: GameState, roll: RolledArrival, t: number): Gam
         st = { ...st, activeEvents: trimmed };
         st = stampCodex(st, 'events', events[0].kind);
         const def = MARKET_EVENTS_BY_ID[events[0].kind];
-        const stationName = STATIONS_BY_ID[events[0].stationId]?.name ?? '?';
+        const stationName = stationDisplayName(events[0].stationId, st.sector, st.runSeed ?? 0);
         const goodName = events[0].goodId ? goodById(events[0].goodId)?.name ?? '?' : '';
         const text = def.copyTemplate
           .replace('{station}', stationName)

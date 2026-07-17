@@ -6,6 +6,7 @@ import { STATIONS } from '../config/stations';
 import { type RngFn, randInt, randRange, pick, chance } from './rng';
 import { netWorth, maxHold } from './derived';
 import { allUnlockedGoods } from './pricing';
+import { stationDisplayName } from './sectorgen';
 
 function fillLabel(tpl: string, params: Record<string, string | number>): string {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? ''));
@@ -37,7 +38,7 @@ export function generateQuest(size: QuestSize, state: GameState, rng: RngFn, seq
     }
     case 'visit_station':
       stationId = station.id;
-      label = fillLabel(tpl.label, { station: station.name });
+      label = fillLabel(tpl.label, { station: stationDisplayName(station.id, state.sector, state.runSeed ?? 0) });
       break;
     case 'jump_n':
       goal = randInt(rng, 2, 5);
