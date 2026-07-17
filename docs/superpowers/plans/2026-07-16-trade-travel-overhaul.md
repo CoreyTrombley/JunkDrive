@@ -2800,3 +2800,81 @@ Expected after reload: no console errors; three contracts appear; market control
 - Deliberate sequencing: Tasks 8→9 and 12→13→14 are order-dependent (placeholder SFX swaps, UI consuming engine); everything else is file-disjoint enough for the parallel-wave execution style used last time.
 - Known deferred ideas (spec "out of scope"): price webs, tile movement, search/saved views, manifest chains.
 - Adversarial review pass (33 agents, 2026-07-16) confirmed and fixed 12 distinct defects, notably: tuning.test.ts legacy-constant collisions (now updated in Tasks 2/12), the derelict use-before-declaration reorder, travel.test.ts nondeterminism (pinned seed + rank 12), the tonnage tutorial soft-lock (Task 3 fixes Onboarding to 3 scrap), the motherlode tonnage budget, scan-aware manifest pools, and the 3-heavy-item manifest clamp. One finding was rejected as modeling-fidelity-only (the sim's flat 0.85 stock-retention constant vs the dynamic implementation — the constant is a deliberate simplification).
+
+---
+
+### Task 13b: Dressed station names everywhere (user-reported bug)
+
+User report: in sectors 2+, stations are renamed by `dressStationForSector`, but the econ
+hints (Market Scanner route hint), HUD event ticker, market-event toasts, quest labels and
+the market screen header still show the ORIGINAL sector-1 names. One canonical helper, used
+at every user-facing station-name site. Runs AFTER Task 13 (it edits the rewritten MapScreen).
+
+**Files:**
+- Modify: `src/engine/sectorgen.ts` (new helper)
+- Modify: `src/components/MarketScreen.tsx`, `src/components/Hud.tsx`, `src/components/ContractsPanel.tsx`, `src/components/MapScreen.tsx`
+- Modify: `src/engine/actions.ts` (market-event toast), `src/engine/quests.ts` (visit_station label)
+- Test: append to `src/engine/__tests__/mapgen.test.ts`
+
+**Interfaces:**
+- Produces: `stationDisplayName(stationId: string, sector: number, runSeed: number): string` exported from `sectorgen.ts` — base name in sector 1, dressed name in sectors ≥ 2, falls back to the id for unknown stations.
+
+- [ ] **Step 1: Write the failing test** — append to `src/engine/__tests__/mapgen.test.ts` (add `stationDisplayName` to an import from `'../sectorgen'`):
+
+```ts
+describe('stationDisplayName', () => {
+  it('uses the base name in sector 1 and the dressed name in sector 2+', () => {
+    expect(stationDisplayName('rust_harbor', 1, 777)).toBe('Rust Harbor');
+    const dressed = stationDisplayName('rust_harbor', 2, 777);
+    expect(dressed).not.toBe('Rust Harbor');
+    expect(dressed.length).toBeGreaterThan(0);
+    expect(stationDisplayName('rust_harbor', 2, 777)).toBe(dressed); // deterministic
+  });
+
+  it('falls back to the id for unknown stations', () => {
+    expect(stationDisplayName('wp-s1-0', 1, 777)).toBe('wp-s1-0');
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure** — `npx vitest run src/engine/__tests__/mapgen.test.ts` — Expected: FAIL (no such export).
+
+- [ ] **Step 3: Helper** — in `src/engine/sectorgen.ts`, add `import { STATIONS_BY_ID } from '../config/stations';` and, below `dressStationForSector`:
+
+```ts
+/** Canonical user-facing station name: hand-authored in sector 1, per-sector
+ *  dressing beyond — every UI surface must use this, not `station.name`. */
+export function stationDisplayName(stationId: string, sector: number, runSeed: number): string {
+  const dressed = dressStationForSector(stationId, sector, runSeed);
+  return dressed.name || STATIONS_BY_ID[stationId]?.name || stationId;
+}
+```
+
+- [ ] **Step 4: Sweep the sites** (each is a mechanical swap; `s`/`state` is in scope at every site):
+
+4a. `src/components/MarketScreen.tsx` — import `stationDisplayName` from `'../engine/sectorgen'`; the station-branch header `<h1>{station.name}</h1>` becomes `<h1>{stationDisplayName(s.currentStation, s.sector, s.runSeed ?? 0)}</h1>`.
+
+4b. `src/components/Hud.tsx` — import the helper; in the events ticker line replace `${station?.name ?? '?'}` with `${station ? stationDisplayName(station.id, s.sector, s.runSeed ?? 0) : '?'}`.
+
+4c. `src/components/ContractsPanel.tsx` — import the helper; the `c-dest` line's `{station?.name ?? m.stationId}` becomes `{station ? stationDisplayName(station.id, s.sector, s.runSeed ?? 0) : m.stationId}`.
+
+4d. `src/components/MapScreen.tsx` — the route-hint line's `<b>{STATIONS_BY_ID[hint.stationId]?.name}</b>` becomes `<b>{stationDisplayName(hint.stationId, s.sector, s.runSeed ?? 0)}</b>` (helper already imported there via `dressStationForSector`'s module — extend that import).
+
+4e. `src/engine/actions.ts` — in `applyArrivalRoll`'s market_event case, `const stationName = STATIONS_BY_ID[events[0].stationId]?.name ?? '?';` becomes `const stationName = stationDisplayName(events[0].stationId, st.sector, st.runSeed ?? 0);` (add the helper to the existing `./sectorgen` import).
+
+4f. `src/engine/quests.ts` — in `generateQuest`'s `visit_station` case, `label = fillLabel(tpl.label, { station: station.name });` becomes `label = fillLabel(tpl.label, { station: stationDisplayName(station.id, state.sector, state.runSeed ?? 0) });` (import the helper from `'./sectorgen'`).
+
+- [ ] **Step 5: Verify** — focused test PASS; full `npm test` green; `npm run typecheck` exit 0.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/engine/sectorgen.ts src/components/MarketScreen.tsx src/components/Hud.tsx src/components/ContractsPanel.tsx src/components/MapScreen.tsx src/engine/actions.ts src/engine/quests.ts src/engine/__tests__/mapgen.test.ts
+git commit -m "fix: dressed station names in hints, tickers, toasts, quests and headers
+
+Sectors 2+ rename stations, but econ hints and other surfaces still
+showed the sector-1 names (user report). One canonical
+stationDisplayName() helper, used everywhere a station name renders.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
