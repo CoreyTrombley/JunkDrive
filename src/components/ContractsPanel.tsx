@@ -3,7 +3,7 @@ import { canDeliver } from '../engine/manifests';
 import { deliverManifest } from '../engine/actions';
 import { goodById } from '../engine/pricing';
 import { STATIONS_BY_ID } from '../config/stations';
-import { formatCredits, formatDuration } from '../engine/num';
+import { formatCredits, formatDuration, formatNum } from '../engine/num';
 import { now } from '../engine/time';
 import { stationDisplayName } from '../engine/sectorgen';
 
@@ -28,7 +28,7 @@ export function ContractsPanel() {
                   const have = s.cargo[it.goodId]?.qty ?? 0;
                   return (
                     <span key={it.goodId} class={`c-item${have >= it.qty ? ' have' : ''}`}>
-                      {g?.icon} {have}/{it.qty}
+                      {g?.icon} {formatNum(have)}/{formatNum(it.qty)}
                     </span>
                   );
                 })}
