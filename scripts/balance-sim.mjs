@@ -173,4 +173,42 @@ for (const [label, ok] of checks) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
   if (!ok) failed++;
 }
+
+// ---------------------------------------------------------------------------
+// Endgame ladder (spec 2026-07-17): tapered scale/tolls + Gate Resonance.
+// Mirrors: price.ts sectorScale taper, formulas.ts gateToll/resonanceNeeded.
+const sectorScaleV2 = (s) => Math.pow(8, Math.min(s, 10) - 1) * Math.pow(1.6, Math.max(0, s - 10));
+const resonanceNeeded = (d) => (d <= 10 ? 0 : Math.ceil(6 * Math.pow(1.062, d - 10)));
+
+// Optimal active climber: late-game loop ≈ 181s (recycler 5), charges/loop =
+// 1 qualifying flip + 30% manifests (+3) + 10% salvage (+1) = 2.0
+// (valid because resonance requires MOVED goods — wash-trades and at-the-door
+// manifest buys earn nothing, so a charge really costs a travel loop)
+const LOOP_EARLY = 2 * 1.8 * 1.15 * 65 + 2 * 1.8 * 3 + 25;
+const LOOP_LATE = 2 * 1.8 * 1.15 * 35 + 2 * 1.8 * 3 + 25;
+const CHARGES_PER_LOOP = 1 + 0.3 * 3 + 0.1;
+
+let ladderTotalH = 0;
+let s20H = 0;
+let lastGateH = 0;
+for (let dest = 2; dest <= 99; dest++) {
+  const loop = dest < 15 ? LOOP_EARLY : LOOP_LATE;
+  const loopsPerHour = 3600 / loop;
+  const hours = dest <= 10 ? 0.4 : resonanceNeeded(dest) / (CHARGES_PER_LOOP * loopsPerHour);
+  ladderTotalH += hours;
+  if (dest === 20) s20H = ladderTotalH;
+  if (dest === 99) lastGateH = hours;
+}
+console.log(`\nladder: total S99 = ${ladderTotalH.toFixed(0)}h · S20 @ ${s20H.toFixed(1)}h · final gate ${lastGateH.toFixed(1)}h · S99 scale ${sectorScaleV2(99).toExponential(2)}`);
+
+const ladderChecks = [
+  ['ladder: total time to S99 in [450h, 650h]', ladderTotalH >= 450 && ladderTotalH <= 650],
+  ['ladder: final S99 gate in [25h, 40h]', lastGateH >= 25 && lastGateH <= 40],
+  ['ladder: S20 cumulative <= 8h (early game stays quick)', s20H <= 8],
+  ['ladder: S99 prices stay readable (< 1e27 scale)', sectorScaleV2(99) < 1e27],
+];
+for (const [label, ok] of ladderChecks) {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  if (!ok) failed++;
+}
 process.exit(failed ? 1 : 0);
